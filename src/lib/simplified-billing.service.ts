@@ -201,6 +201,7 @@ export class SimplifiedBillingService {
         .insert({
           ...messageData,
           content: messageContent, // ✅ Garantir que o campo content seja preenchido
+          message_content: messageContent, // ✅ Garantir que o campo message_content seja preenchido
           billing_status: 'pending' // Inicia como pending
         })
         .select('*')

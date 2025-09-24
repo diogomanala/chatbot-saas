@@ -87,9 +87,9 @@ export async function POST(req: NextRequest) {
                            messageData.extendedTextMessage?.text || 
                            messageData.text || 
                            '';
-      const remoteJid = messageData.key?.remoteJid || '';
-      const messageId = messageData.key?.id || '';
-      const fromMe = messageData.key?.fromMe || false;
+      const remoteJid = data?.key?.remoteJid || '';
+      const messageId = data?.key?.id || '';
+      const fromMe = data?.key?.fromMe || false;
 
       console.log(`📝 [${correlationId}] Conteúdo da mensagem: "${messageContent}"`);
       console.log(`👤 [${correlationId}] De: ${remoteJid}, FromMe: ${fromMe}`);
@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
           device_id: deviceData.id,
           chatbot_id: deviceData.chatbot_id,
           phone_number: normalizedPhone,
-          content: messageContent,
+          message_content: messageContent,
           direction: 'inbound',
           status: 'received',
           external_id: messageId,
@@ -204,7 +204,7 @@ export async function POST(req: NextRequest) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            number: normalizedPhone,
+            number: remoteJid,
             text: aiMessage
           })
         });
