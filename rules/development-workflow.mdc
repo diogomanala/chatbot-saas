@@ -1,0 +1,24 @@
+## rules/development-workflow.mdc
+# Development Workflow
+
+1. Criar/alterar feature em `src/features/<feature>`.
+2. Registrar controller em `src/igniter.router.ts`.
+3. Rodar dev server; `igniter.client.ts` é gerado automaticamente (não editar).
+4. Escrever **tests unitários/integrados**.
+5. Documentar mudanças em `rules/memory.mdc`.
+
+### Padrões de Branch/Commit
+- Branch: `feat/<area>-<resumo>`, `fix/<area>-<bug>`.
+- Commits convencionais: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`.
+
+### Checklist de PR
+- [ ] Tipos/Zod alinhados  
+- [ ] Tests passando (unit/contract/integration)  
+- [ ] Sem logs ruidosos  
+- [ ] Sem alterações em arquivos gerados  
+- [ ] Docs atualizadas
+
+### Comandos
+```bash
+pnpm typecheck && pnpm lint && pnpm test
+```

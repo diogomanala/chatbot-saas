@@ -1,0 +1,47 @@
+## rules/browser.mdc
+# Browser Tool Usage (MCP `@playwright/mcp`)
+
+## Princípios
+- Usar **apenas com consentimento** do usuário.
+- Respeitar **robots.txt** e ToS do site.
+- **Nunca** retornar HTML cru; retornar **JSON estruturado** e resumido.
+- Escopo mínimo: títulos, links, status, metadados.
+
+## Padrão de Saída
+```json
+{
+  "url": "https://example.com/",
+  "status": 200,
+  "timestamp": "2025-09-11T12:34:56Z",
+  "items": [
+    { "title": "...", "href": "...", "summary": "..." }
+  ],
+  "notes": "robots.txt allowed: true"
+}
+```
+
+## Boas Práticas
+- **Rate limit**: 1–3 req/s; **backoff exponencial** em 429/5xx.
+- **Timeout** padrão 10s por navegação; retry máx 2x.
+- **Selectors** robustos (aria/role/data-testid), evite CSS frágil.
+- **Cache** resultados a nível de tarefa quando possível.
+- **Circuit breaker** após 3 falhas consecutivas por host.
+
+## Erros (transparência)
+```json
+{
+  "error": {
+    "type": "NAVIGATION_ERROR",
+    "message": "Timeout after 10s",
+    "url": "https://...",
+    "status": null
+  }
+}
+```
+
+## Exemplo de Uso (pseudo)
+```ts
+// Request shape validated with Zod
+const Input = z.object({ url: z.string().url(), consent: z.boolean() });
+if (!input.consent) throw new Error('Browser MCP requires explicit consent');
+```

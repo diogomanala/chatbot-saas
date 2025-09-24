@@ -1,0 +1,19 @@
+## rules/testing.mdc
+# Testing Guidelines
+
+## Pirâmide
+- **Unit**: controllers/services (rápidos, isolados).  
+- **Contract**: MCP tools (validação input/output).  
+- **Integration**: fluxo completo (router ↔ services ↔ store).  
+
+## Metas
+- Cobertura mínima: 80% linhas; 90% crítico.
+
+## Exemplos
+```ts
+// Vitest example
+it('creates a post', async () => {
+  const res = await posts.create.resolve({ input: { title: 't', body: 'b' } } as any);
+  expect(res).toHaveProperty('id');
+});
+```

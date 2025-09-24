@@ -1,0 +1,8 @@
+## rules/rules.mdc
+# Global Rules
+
+- Preferir **fontes reais** (código, schema, docs) a especulação.
+- **Fail fast** com erros claros (HTTP, MCP, validation).
+- **Nunca** inventar APIs/funções/bibliotecas.
+- Respeitar **semver** e contratos públicos.
+- **Mantenha os padrões visuais existentes**; **use componentes já criados**.

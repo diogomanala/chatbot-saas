@@ -1,0 +1,19 @@
+## rules/igniter-advanced-features.mdc
+# Igniter Advanced Features
+
+## Jobs (BullMQ)
+- Use para tarefas longas (ETLs, notificações).
+- **Retry** com backoff; **dead-letter queue**; **concurrency** configurável.
+```ts
+queue.add('sendEmail', { userId }, { attempts: 3, backoff: { type: 'exponential', delay: 1000 } });
+```
+
+## Store (Redis)
+- Cache com TTL; **invalidation** em mutações.  
+- Pub/Sub para realtime.
+
+## Realtime
+- Queries com `{ stream: true }` e backpressure controlado.
+
+## Docs/OpenAPI
+- `igniter generate docs` para sincronizar contratos.

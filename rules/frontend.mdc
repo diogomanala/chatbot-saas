@@ -1,0 +1,27 @@
+## rules/frontend.mdc
+# Frontend Integration
+
+## Server Components (RSC)
+```ts
+// Server component
+const posts = await api.posts.list.query();
+```
+
+## Client Components
+```ts
+function Posts() {
+  const { data, isLoading, error } = api.posts.list.useQuery();
+  const mutation = api.posts.create.useMutation({ onSuccess: () => api.posts.list.revalidate() });
+  // Render states
+}
+```
+
+## Realtime & Streaming
+- Queries: `{ stream: true }`  
+- Mutations: sempre chamar `.revalidate()` no(s) cache(s) afetado(s).
+
+## Performance
+- **Avoid waterfalls**; usar **parallel fetch** no servidor.  
+- **Suspense** + **skeletons** para UX suave.  
+- **Memo/virtualization** para listas grandes.  
+- **Edge runtime** quando aplicável.

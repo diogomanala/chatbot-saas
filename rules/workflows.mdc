@@ -1,0 +1,5 @@
+# Workflows
+
+1. Branch → PR → Review → Merge.  
+2. CI: lint, type-check, tests.  
+3. Release notes listam endpoints e breaking changes.

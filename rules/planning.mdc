@@ -1,0 +1,13 @@
+## rules/planning.mdc
+# Planning Rules
+
+- Requisitos em **EARS**.
+- Design antes do código; diagramas simples.
+- Quebrar tarefas em passos pequenos e testáveis.
+- Priorizar por impacto/risco.
+
+### Template de Task
+- Objetivo  
+- Critérios de sucesso  
+- Plano de testes  
+- Riscos/mitigações
