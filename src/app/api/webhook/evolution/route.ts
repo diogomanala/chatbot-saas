@@ -113,13 +113,7 @@ export async function POST(req: NextRequest) {
         .from('devices')
         .select(`
           id,
-          org_id,
-          chatbot_id,
-          chatbots!devices_chatbot_id_fkey (
-            id,
-            name,
-            system_prompt
-          )
+          org_id
         `)
         .eq('instance_id', instance)
         .single();
@@ -130,7 +124,50 @@ export async function POST(req: NextRequest) {
       }
 
       console.log(`✅ [${correlationId}] Dispositivo encontrado: ${deviceData.id}`);
-      console.log(`🤖 [${correlationId}] Chatbot: ${deviceData.chatbots?.name}`);
+      console.log(`🏢 [${correlationId}] Organização: ${deviceData.org_id}`);
+
+      // Buscar chatbot ativo para a organização
+      console.log(`🔍 [${correlationId}] Buscando chatbot ativo para org_id: ${deviceData.org_id}`);
+      
+      const { data: activeChatbot, error: chatbotError } = await supabaseAdmin
+        .from('chatbots')
+        .select(`
+          id,
+          name,
+          system_prompt,
+          model,
+          flows_enabled
+        `)
+        .eq('org_id', deviceData.org_id)
+        .eq('is_active', true)
+        .single();
+
+      if (chatbotError || !activeChatbot) {
+        console.error(`❌ [${correlationId}] Chatbot ativo não encontrado para org_id ${deviceData.org_id}:`, chatbotError);
+        
+        // Tentar enviar mensagem de erro para o usuário
+        try {
+          await fetch(`${EVOLUTION_API_URL}/message/sendText/${instance}`, {
+            method: 'POST',
+            headers: {
+              'apikey': EVOLUTION_API_KEY,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              number: remoteJid,
+              text: 'Desculpe, não há nenhum chatbot ativo configurado para esta organização. Entre em contato com o administrador.'
+            })
+          });
+        } catch (fallbackError) {
+          console.error(`❌ [${correlationId}] Erro ao enviar mensagem de fallback:`, fallbackError);
+        }
+
+        return NextResponse.json({ error: 'No active chatbot found for organization' }, { status: 404 });
+      }
+
+      console.log(`✅ [${correlationId}] Chatbot ativo encontrado: ${activeChatbot.name} (ID: ${activeChatbot.id})`);
+      console.log(`🔧 [${correlationId}] Modelo: ${activeChatbot.model || 'gpt-3.5-turbo'}`);
+      console.log(`🎯 [${correlationId}] Fluxos habilitados: ${activeChatbot.flows_enabled}`);
 
       const normalizedPhone = normalizeJidPhone(remoteJid);
 
@@ -143,7 +180,7 @@ export async function POST(req: NextRequest) {
           id: uuidv4(),
           org_id: deviceData.org_id,
           device_id: deviceData.id,
-          chatbot_id: deviceData.chatbot_id,
+          chatbot_id: activeChatbot.id,
           phone_number: normalizedPhone,
           message_content: messageContent,
           direction: 'inbound',
@@ -162,23 +199,9 @@ export async function POST(req: NextRequest) {
 
       console.log(`✅ [${correlationId}] Mensagem inbound salva: ${savedMessage.id}`);
 
-      // Verificar feature flag flows_enabled
-      console.log(`🔍 [${correlationId}] Verificando feature flag flows_enabled para chatbot ${deviceData.chatbot_id}`);
-      
-      const { data: chatbot, error: chatbotError } = await supabaseAdmin
-        .from('chatbots')
-        .select('flows_enabled')
-        .eq('id', deviceData.chatbot_id)
-        .single();
-
-      if (chatbotError) {
-        console.error(`❌ [${correlationId}] Erro ao buscar chatbot:`, chatbotError);
-        throw new Error(`Erro ao buscar chatbot: ${chatbotError.message}`);
-      }
-
-      if (chatbot?.flows_enabled === true) {
+      if (activeChatbot.flows_enabled === true) {
         // --- NOVA LÓGICA DO MOTOR DE FLUXOS ---
-        console.log(`🔄 [${correlationId}] Chatbot ${deviceData.chatbot_id} tem fluxos ativados. Iniciando motor de fluxos...`);
+        console.log(`🔄 [${correlationId}] Chatbot ${activeChatbot.id} tem fluxos ativados. Iniciando motor de fluxos...`);
         
         // Aqui, futuramente, entrará a lógica para verificar a chat_session,
         // encontrar o gatilho, executar a etapa, etc.
@@ -219,9 +242,9 @@ export async function POST(req: NextRequest) {
               id: uuidv4(),
               org_id: deviceData.org_id,
               device_id: deviceData.id,
-              chatbot_id: deviceData.chatbot_id,
+              chatbot_id: activeChatbot.id,
               phone_number: normalizedPhone,
-              content: flowsMessage,
+              message_content: flowsMessage,
               direction: 'outbound',
               status: 'sent',
               external_id: sendResult.key?.id || null,
@@ -269,12 +292,13 @@ export async function POST(req: NextRequest) {
 
       } else {
         // --- LÓGICA ANTIGA E FUNCIONAL DA IA GERAL ---
-        console.log(`🧠 [${correlationId}] Chatbot ${deviceData.chatbot_id} tem fluxos desativados. Usando IA geral.`);
+        console.log(`🧠 [${correlationId}] Chatbot ${activeChatbot.id} tem fluxos desativados. Usando IA geral.`);
         
         // Gerar resposta da IA
         console.log(`🧠 [${correlationId}] Gerando resposta da IA`);
         
-        const systemPrompt = deviceData.chatbots?.system_prompt || 'Você é um assistente útil.';
+        const systemPrompt = activeChatbot.system_prompt || 'Você é um assistente útil.';
+        const model = activeChatbot.model || 'gpt-3.5-turbo';
         
         try {
           const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -284,7 +308,7 @@ export async function POST(req: NextRequest) {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              model: 'gpt-3.5-turbo',
+              model: model,
               messages: [
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: messageContent }
@@ -334,9 +358,9 @@ export async function POST(req: NextRequest) {
               id: uuidv4(),
               org_id: deviceData.org_id,
               device_id: deviceData.id,
-              chatbot_id: deviceData.chatbot_id,
+              chatbot_id: activeChatbot.id,
               phone_number: normalizedPhone,
-              content: aiMessage,
+              message_content: aiMessage,
               direction: 'outbound',
               status: 'sent',
               external_id: sendResult.key?.id || null,
