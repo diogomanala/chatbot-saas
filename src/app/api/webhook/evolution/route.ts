@@ -162,115 +162,225 @@ export async function POST(req: NextRequest) {
 
       console.log(`✅ [${correlationId}] Mensagem inbound salva: ${savedMessage.id}`);
 
-      // Gerar resposta da IA
-      console.log(`🧠 [${correlationId}] Gerando resposta da IA`);
+      // Verificar feature flag flows_enabled
+      console.log(`🔍 [${correlationId}] Verificando feature flag flows_enabled para chatbot ${deviceData.chatbot_id}`);
       
-      const systemPrompt = deviceData.chatbots?.system_prompt || 'Você é um assistente útil.';
-      
-      try {
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${OPENAI_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'gpt-3.5-turbo',
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: messageContent }
-            ],
-            max_tokens: 500,
-            temperature: 0.7
-          })
-        });
+      const { data: chatbot, error: chatbotError } = await supabaseAdmin
+        .from('chatbots')
+        .select('flows_enabled')
+        .eq('id', deviceData.chatbot_id)
+        .single();
 
-        if (!response.ok) {
-          throw new Error(`OpenAI API error: ${response.status}`);
-        }
+      if (chatbotError) {
+        console.error(`❌ [${correlationId}] Erro ao buscar chatbot:`, chatbotError);
+        throw new Error(`Erro ao buscar chatbot: ${chatbotError.message}`);
+      }
 
-        const aiResponse = await response.json();
-        const aiMessage = aiResponse.choices?.[0]?.message?.content || 'Desculpe, não consegui processar sua mensagem.';
-
-        console.log(`🤖 [${correlationId}] Resposta da IA gerada: "${aiMessage}"`);
-
-        // Enviar resposta via Evolution API
-        console.log(`📤 [${correlationId}] Enviando resposta via Evolution API`);
+      if (chatbot?.flows_enabled === true) {
+        // --- NOVA LÓGICA DO MOTOR DE FLUXOS ---
+        console.log(`🔄 [${correlationId}] Chatbot ${deviceData.chatbot_id} tem fluxos ativados. Iniciando motor de fluxos...`);
         
-        const sendResponse = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instance}`, {
-          method: 'POST',
-          headers: {
-            'apikey': EVOLUTION_API_KEY,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            number: remoteJid,
-            text: aiMessage
-          })
-        });
-
-        if (!sendResponse.ok) {
-          throw new Error(`Evolution API error: ${sendResponse.status}`);
-        }
-
-        const sendResult = await sendResponse.json();
-        console.log(`✅ [${correlationId}] Resposta enviada via Evolution API:`, sendResult);
-
-        // Salvar resposta enviada (outbound)
-        console.log(`💾 [${correlationId}] Salvando mensagem outbound`);
+        // Aqui, futuramente, entrará a lógica para verificar a chat_session,
+        // encontrar o gatilho, executar a etapa, etc.
+        // Por enquanto, apenas um log é suficiente.
         
-        const { error: outboundError } = await supabaseAdmin
-          .from('messages')
-          .insert({
-            id: uuidv4(),
-            org_id: deviceData.org_id,
-            device_id: deviceData.id,
-            chatbot_id: deviceData.chatbot_id,
-            phone_number: normalizedPhone,
-            content: aiMessage,
-            direction: 'outbound',
-            status: 'sent',
-            external_id: sendResult.key?.id || null,
-            created_at: nowIso(),
-            updated_at: nowIso()
-          });
-
-        if (outboundError) {
-          console.error(`❌ [${correlationId}] Erro ao salvar mensagem outbound:`, outboundError);
-        } else {
-          console.log(`✅ [${correlationId}] Mensagem outbound salva`);
-        }
-
-        console.log(`🎉 [${correlationId}] Processamento completo da mensagem finalizado`);
+        // Resposta temporária para fluxos ativados
+        const flowsMessage = 'Motor de fluxos ativado! Esta funcionalidade será implementada em breve.';
         
-        return NextResponse.json({ 
-          success: true, 
-          message: 'Message processed and response sent',
-          correlationId,
-          aiResponse: aiMessage
-        });
-
-      } catch (aiError) {
-        console.error(`❌ [${correlationId}] Erro na IA ou envio:`, aiError);
-        
-        // Tentar enviar mensagem de erro
         try {
-          await fetch(`${EVOLUTION_API_URL}/message/sendText/${instance}`, {
+          // Enviar resposta via Evolution API
+          console.log(`📤 [${correlationId}] Enviando resposta do motor de fluxos via Evolution API`);
+          
+          const sendResponse = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instance}`, {
             method: 'POST',
             headers: {
               'apikey': EVOLUTION_API_KEY,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              number: normalizedPhone,
-              text: 'Desculpe, ocorreu um erro temporário. Tente novamente em alguns instantes.'
+              number: remoteJid,
+              text: flowsMessage
             })
           });
-        } catch (fallbackError) {
-          console.error(`❌ [${correlationId}] Erro ao enviar mensagem de fallback:`, fallbackError);
+
+          if (!sendResponse.ok) {
+            throw new Error(`Evolution API error: ${sendResponse.status}`);
+          }
+
+          const sendResult = await sendResponse.json();
+          console.log(`✅ [${correlationId}] Resposta do motor de fluxos enviada via Evolution API:`, sendResult);
+
+          // Salvar resposta enviada (outbound)
+          console.log(`💾 [${correlationId}] Salvando mensagem outbound do motor de fluxos`);
+          
+          const { error: outboundError } = await supabaseAdmin
+            .from('messages')
+            .insert({
+              id: uuidv4(),
+              org_id: deviceData.org_id,
+              device_id: deviceData.id,
+              chatbot_id: deviceData.chatbot_id,
+              phone_number: normalizedPhone,
+              content: flowsMessage,
+              direction: 'outbound',
+              status: 'sent',
+              external_id: sendResult.key?.id || null,
+              created_at: nowIso(),
+              updated_at: nowIso()
+            });
+
+          if (outboundError) {
+            console.error(`❌ [${correlationId}] Erro ao salvar mensagem outbound do motor de fluxos:`, outboundError);
+          } else {
+            console.log(`✅ [${correlationId}] Mensagem outbound do motor de fluxos salva`);
+          }
+
+          console.log(`🎉 [${correlationId}] Processamento do motor de fluxos finalizado`);
+          
+          return NextResponse.json({ 
+            success: true, 
+            message: 'Message processed by flows engine',
+            correlationId,
+            flowsResponse: flowsMessage
+          });
+
+        } catch (flowsError) {
+          console.error(`❌ [${correlationId}] Erro no motor de fluxos:`, flowsError);
+          
+          // Tentar enviar mensagem de erro
+          try {
+            await fetch(`${EVOLUTION_API_URL}/message/sendText/${instance}`, {
+              method: 'POST',
+              headers: {
+                'apikey': EVOLUTION_API_KEY,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                number: remoteJid,
+                text: 'Desculpe, ocorreu um erro no motor de fluxos. Tente novamente em alguns instantes.'
+              })
+            });
+          } catch (fallbackError) {
+            console.error(`❌ [${correlationId}] Erro ao enviar mensagem de fallback do motor de fluxos:`, fallbackError);
+          }
+
+          throw flowsError;
         }
 
-        throw aiError;
+      } else {
+        // --- LÓGICA ANTIGA E FUNCIONAL DA IA GERAL ---
+        console.log(`🧠 [${correlationId}] Chatbot ${deviceData.chatbot_id} tem fluxos desativados. Usando IA geral.`);
+        
+        // Gerar resposta da IA
+        console.log(`🧠 [${correlationId}] Gerando resposta da IA`);
+        
+        const systemPrompt = deviceData.chatbots?.system_prompt || 'Você é um assistente útil.';
+        
+        try {
+          const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${OPENAI_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'gpt-3.5-turbo',
+              messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: messageContent }
+              ],
+              max_tokens: 500,
+              temperature: 0.7
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error(`OpenAI API error: ${response.status}`);
+          }
+
+          const aiResponse = await response.json();
+          const aiMessage = aiResponse.choices?.[0]?.message?.content || 'Desculpe, não consegui processar sua mensagem.';
+
+          console.log(`🤖 [${correlationId}] Resposta da IA gerada: "${aiMessage}"`);
+
+          // Enviar resposta via Evolution API
+          console.log(`📤 [${correlationId}] Enviando resposta via Evolution API`);
+          
+          const sendResponse = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instance}`, {
+            method: 'POST',
+            headers: {
+              'apikey': EVOLUTION_API_KEY,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              number: remoteJid,
+              text: aiMessage
+            })
+          });
+
+          if (!sendResponse.ok) {
+            throw new Error(`Evolution API error: ${sendResponse.status}`);
+          }
+
+          const sendResult = await sendResponse.json();
+          console.log(`✅ [${correlationId}] Resposta enviada via Evolution API:`, sendResult);
+
+          // Salvar resposta enviada (outbound)
+          console.log(`💾 [${correlationId}] Salvando mensagem outbound`);
+          
+          const { error: outboundError } = await supabaseAdmin
+            .from('messages')
+            .insert({
+              id: uuidv4(),
+              org_id: deviceData.org_id,
+              device_id: deviceData.id,
+              chatbot_id: deviceData.chatbot_id,
+              phone_number: normalizedPhone,
+              content: aiMessage,
+              direction: 'outbound',
+              status: 'sent',
+              external_id: sendResult.key?.id || null,
+              created_at: nowIso(),
+              updated_at: nowIso()
+            });
+
+          if (outboundError) {
+            console.error(`❌ [${correlationId}] Erro ao salvar mensagem outbound:`, outboundError);
+          } else {
+            console.log(`✅ [${correlationId}] Mensagem outbound salva`);
+          }
+
+          console.log(`🎉 [${correlationId}] Processamento completo da mensagem finalizado`);
+          
+          return NextResponse.json({ 
+            success: true, 
+            message: 'Message processed and response sent',
+            correlationId,
+            aiResponse: aiMessage
+          });
+
+        } catch (aiError) {
+          console.error(`❌ [${correlationId}] Erro na IA ou envio:`, aiError);
+          
+          // Tentar enviar mensagem de erro
+          try {
+            await fetch(`${EVOLUTION_API_URL}/message/sendText/${instance}`, {
+              method: 'POST',
+              headers: {
+                'apikey': EVOLUTION_API_KEY,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                number: remoteJid,
+                text: 'Desculpe, ocorreu um erro temporário. Tente novamente em alguns instantes.'
+              })
+            });
+          } catch (fallbackError) {
+            console.error(`❌ [${correlationId}] Erro ao enviar mensagem de fallback:`, fallbackError);
+          }
+
+          throw aiError;
+        }
       }
     }
 
