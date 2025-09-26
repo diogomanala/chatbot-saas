@@ -299,8 +299,8 @@ export async function POST(req: NextRequest) {
         
         const systemPrompt = activeChatbot.system_prompt || 'Você é um assistente útil.';
         // TODO: Adicionar coluna 'openai_model' na tabela chatbots para evitar confusão entre modelos Groq e OpenAI
-        // Por enquanto, usando modelo fixo válido da OpenAI para resolver erro 404
-        const model = 'gpt-4o'; // Modelo válido da OpenAI (antes estava usando activeChatbot.groq_model que é da Groq)
+        // Usando gpt-4o-mini: modelo mais barato e eficiente da OpenAI (60% mais barato que GPT-3.5 Turbo)
+        const model = 'gpt-4o-mini'; // Modelo mais econômico da OpenAI com excelente performance
         
         try {
           const response = await fetch('https://api.openai.com/v1/chat/completions', {
