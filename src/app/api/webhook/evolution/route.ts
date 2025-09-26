@@ -18,6 +18,120 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
 const normalizeJidPhone = (jid: string) => jid.replace(/@s\.whatsapp\.net$/, '');
 const nowIso = () => new Date().toISOString();
 
+// Função auxiliar para executar um passo do fluxo
+async function executeFlowStep(
+  supabase: any,
+  flow: any,
+  currentStepId: string,
+  session: any,
+  userMessage: string,
+  correlationId: string
+): Promise<{ response: string; nextStepId: string | null }> {
+  console.log(`🔧 [${correlationId}] Executando passo do fluxo:`, currentStepId);
+  
+  const flowData = flow.flow_data;
+  const currentNode = flowData.nodes?.find((node: any) => node.id === currentStepId);
+  
+  if (!currentNode) {
+    console.error(`❌ [${correlationId}] Nó não encontrado:`, currentStepId);
+    throw new Error(`Nó ${currentStepId} não encontrado no fluxo`);
+  }
+
+  console.log(`📍 [${correlationId}] Executando nó tipo:`, currentNode.type);
+
+  let response = '';
+  let nextStepId: string | null = null;
+
+  switch (currentNode.type) {
+    case 'input':
+      // Nó de entrada - apenas passa para o próximo
+      const inputEdge = flowData.edges?.find((edge: any) => edge.source === currentStepId);
+      nextStepId = inputEdge?.target || null;
+      console.log(`➡️ [${correlationId}] Nó input, próximo passo:`, nextStepId);
+      break;
+
+    case 'messageNode':
+      // Nó de mensagem - envia uma mensagem
+      response = currentNode.data?.label || 'Mensagem não configurada';
+      
+      // Substituir variáveis na mensagem se houver
+      if (session.session_variables) {
+        Object.keys(session.session_variables).forEach(key => {
+          response = response.replace(`{{${key}}}`, session.session_variables[key]);
+        });
+      }
+      
+      const messageEdge = flowData.edges?.find((edge: any) => edge.source === currentStepId);
+      nextStepId = messageEdge?.target || null;
+      console.log(`💬 [${correlationId}] Nó messageNode, resposta:`, response, 'próximo:', nextStepId);
+      break;
+
+    case 'condition':
+      // Nó de condição - avalia uma condição e escolhe o caminho
+      const condition = currentNode.data?.condition;
+      const conditionValue = currentNode.data?.value;
+      
+      let conditionMet = false;
+      
+      if (condition === 'contains') {
+        conditionMet = userMessage.toLowerCase().includes(conditionValue?.toLowerCase() || '');
+      } else if (condition === 'equals') {
+        conditionMet = userMessage.toLowerCase().trim() === (conditionValue?.toLowerCase().trim() || '');
+      } else if (condition === 'starts_with') {
+        conditionMet = userMessage.toLowerCase().startsWith(conditionValue?.toLowerCase() || '');
+      }
+      
+      // Encontrar a edge correta baseada na condição
+      const conditionEdges = flowData.edges?.filter((edge: any) => edge.source === currentStepId) || [];
+      const trueEdge = conditionEdges.find((edge: any) => edge.sourceHandle === 'true');
+      const falseEdge = conditionEdges.find((edge: any) => edge.sourceHandle === 'false');
+      
+      nextStepId = conditionMet ? (trueEdge?.target || null) : (falseEdge?.target || null);
+      console.log(`🔀 [${correlationId}] Nó condition, condição atendida:`, conditionMet, 'próximo:', nextStepId);
+      break;
+
+    case 'input_capture':
+      // Nó de captura de entrada - salva a resposta do usuário
+      const variableName = currentNode.data?.variable_name || 'captured_input';
+      
+      // Atualizar variáveis da sessão
+      const updatedVariables = {
+        ...session.session_variables,
+        [variableName]: userMessage
+      };
+      
+      await supabase
+        .from('chat_sessions')
+        .update({ 
+          session_variables: updatedVariables,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', session.id);
+      
+      // Resposta opcional do nó
+      response = currentNode.data?.response_message || '';
+      
+      const captureEdge = flowData.edges?.find((edge: any) => edge.source === currentStepId);
+      nextStepId = captureEdge?.target || null;
+      console.log(`📝 [${correlationId}] Nó input_capture, variável salva:`, variableName, '=', userMessage);
+      break;
+
+    case 'output':
+      // Nó de saída - finaliza o fluxo
+      response = currentNode.data?.message || 'Fluxo finalizado';
+      nextStepId = null; // Fim do fluxo
+      console.log(`🏁 [${correlationId}] Nó output, finalizando fluxo`);
+      break;
+
+    default:
+      console.warn(`⚠️ [${correlationId}] Tipo de nó não reconhecido:`, currentNode.type);
+      response = 'Erro: tipo de nó não suportado';
+      nextStepId = null;
+  }
+
+  return { response, nextStepId };
+}
+
 export async function POST(req: NextRequest) {
   const correlationId = uuidv4();
   
@@ -200,72 +314,345 @@ export async function POST(req: NextRequest) {
       console.log(`✅ [${correlationId}] Mensagem inbound salva: ${savedMessage.id}`);
 
       if (activeChatbot.flows_enabled === true) {
-        // --- NOVA LÓGICA DO MOTOR DE FLUXOS ---
+        // --- MOTOR DE FLUXOS COMPLETO ---
         console.log(`🔄 [${correlationId}] Chatbot ${activeChatbot.id} tem fluxos ativados. Iniciando motor de fluxos...`);
         
-        // Aqui, futuramente, entrará a lógica para verificar a chat_session,
-        // encontrar o gatilho, executar a etapa, etc.
-        // Por enquanto, apenas um log é suficiente.
-        
-        // Resposta temporária para fluxos ativados
-        const flowsMessage = 'Motor de fluxos ativado! Esta funcionalidade será implementada em breve.';
-        
         try {
-          // Enviar resposta via Evolution API
-          console.log(`📤 [${correlationId}] Enviando resposta do motor de fluxos via Evolution API`);
-          
-          const sendResponse = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instance}`, {
-            method: 'POST',
-            headers: {
-              'apikey': EVOLUTION_API_KEY,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              number: remoteJid,
-              text: flowsMessage
-            })
-          });
+          // 1. GERENCIAMENTO DE SESSÃO - Verificar se já existe uma sessão ativa
+          const { data: existingSession, error: sessionError } = await supabaseAdmin
+            .from('chat_sessions')
+            .select('*')
+            .eq('chatbot_id', activeChatbot.id)
+            .eq('phone_number', normalizedPhone)
+            .eq('status', 'active')
+            .single();
 
-          if (!sendResponse.ok) {
-            throw new Error(`Evolution API error: ${sendResponse.status}`);
+          if (sessionError && sessionError.code !== 'PGRST116') {
+            console.error(`❌ [${correlationId}] Erro ao buscar sessão:`, sessionError);
+            throw new Error('Erro ao verificar sessão ativa');
           }
 
-          const sendResult = await sendResponse.json();
-          console.log(`✅ [${correlationId}] Resposta do motor de fluxos enviada via Evolution API:`, sendResult);
+          let flowResponse = '';
+          let sessionUpdated = false;
 
-          // Salvar resposta enviada (outbound)
-          console.log(`💾 [${correlationId}] Salvando mensagem outbound do motor de fluxos`);
-          
-          const { error: outboundError } = await supabaseAdmin
-            .from('messages')
-            .insert({
-              id: uuidv4(),
-              org_id: deviceData.org_id,
-              device_id: deviceData.id,
-              chatbot_id: activeChatbot.id,
-              phone_number: normalizedPhone,
-              message_content: flowsMessage,
-              direction: 'outbound',
-              status: 'sent',
-              external_id: sendResult.key?.id || null,
-              created_at: nowIso(),
-              updated_at: nowIso()
+          if (!existingSession) {
+            // 2. LÓGICA DE GATILHO - Não há sessão ativa, verificar trigger_keywords
+            console.log(`🔍 [${correlationId}] Nenhuma sessão ativa encontrada, verificando gatilhos...`);
+            
+            const { data: flows, error: flowsError } = await supabaseAdmin
+              .from('flows')
+              .select('*')
+              .eq('chatbot_id', activeChatbot.id);
+
+            if (flowsError) {
+              console.error(`❌ [${correlationId}] Erro ao buscar fluxos:`, flowsError);
+              throw new Error('Erro ao buscar fluxos disponíveis');
+            }
+
+            // Verificar se a mensagem corresponde a algum trigger_keyword
+            let matchedFlow = null;
+            const messageTextLower = messageContent.toLowerCase().trim();
+
+            for (const flow of flows || []) {
+              if (flow.trigger_keywords && Array.isArray(flow.trigger_keywords)) {
+                const hasMatch = flow.trigger_keywords.some(keyword => 
+                  messageTextLower.includes(keyword.toLowerCase().trim())
+                );
+                
+                if (hasMatch) {
+                  matchedFlow = flow;
+                  console.log(`✅ [${correlationId}] Gatilho encontrado para fluxo:`, flow.name);
+                  break;
+                }
+              }
+            }
+
+            if (matchedFlow) {
+              // Encontrou um fluxo correspondente - criar nova sessão
+              const flowData = matchedFlow.flow_data;
+              
+              // Encontrar o nó "Ponto de Início" (input node)
+              const startNode = flowData.nodes?.find(node => node.type === 'input');
+              
+              if (!startNode) {
+                console.error(`❌ [${correlationId}] Nó de início não encontrado no fluxo:`, matchedFlow.name);
+                throw new Error('Fluxo inválido: nó de início não encontrado');
+              }
+
+              // Criar nova sessão
+              const { data: newSession, error: createSessionError } = await supabaseAdmin
+                .from('chat_sessions')
+                .insert({
+                  id: uuidv4(),
+                  org_id: deviceData.org_id,
+                  chatbot_id: activeChatbot.id,
+                  phone_number: normalizedPhone,
+                  session_token: `session_${normalizedPhone}_${Date.now()}`,
+                  active_flow_id: matchedFlow.id,
+                  current_step_id: startNode.id,
+                  status: 'active',
+                  session_variables: {},
+                  created_at: nowIso(),
+                  updated_at: nowIso()
+                })
+                .select()
+                .single();
+
+              if (createSessionError) {
+                console.error(`❌ [${correlationId}] Erro ao criar sessão:`, createSessionError);
+                throw new Error('Erro ao criar nova sessão');
+              }
+
+              console.log(`🆕 [${correlationId}] Nova sessão criada:`, newSession.id);
+
+              // Executar o primeiro passo do fluxo
+              let { response, nextStepId } = await executeFlowStep(
+                supabaseAdmin, 
+                matchedFlow, 
+                startNode.id, 
+                newSession,
+                messageContent,
+                correlationId
+              );
+              
+              // Se o primeiro passo é um nó input (sem resposta), executar o próximo passo automaticamente
+              if (!response && nextStepId) {
+                console.log(`🔄 [${correlationId}] Nó input executado, continuando para próximo passo: ${nextStepId}`);
+                
+                // Atualizar current_step_id primeiro
+                await supabaseAdmin
+                  .from('chat_sessions')
+                  .update({ 
+                    current_step_id: nextStepId,
+                    updated_at: nowIso()
+                  })
+                  .eq('id', newSession.id);
+
+                // Executar o próximo passo
+                const nextStepResult = await executeFlowStep(
+                  supabaseAdmin,
+                  matchedFlow,
+                  nextStepId,
+                  { ...newSession, current_step_id: nextStepId },
+                  messageContent,
+                  correlationId
+                );
+                
+                response = nextStepResult.response;
+                nextStepId = nextStepResult.nextStepId;
+              }
+              
+              flowResponse = response;
+
+              // Atualizar current_step_id se houver próximo passo
+              if (nextStepId) {
+                await supabaseAdmin
+                  .from('chat_sessions')
+                  .update({ 
+                    current_step_id: nextStepId,
+                    updated_at: nowIso()
+                  })
+                  .eq('id', newSession.id);
+              } else {
+                // Fluxo concluído
+                await supabaseAdmin
+                  .from('chat_sessions')
+                  .update({ 
+                    status: 'completed',
+                    updated_at: nowIso()
+                  })
+                  .eq('id', newSession.id);
+              }
+
+              sessionUpdated = true;
+            } else {
+              // Nenhum gatilho encontrado - deixar a IA geral responder
+              console.log(`❌ [${correlationId}] Nenhum gatilho encontrado, passando para IA geral`);
+              // Não retorna aqui, vai para o bloco da IA geral
+            }
+
+          } else {
+            // 3. LÓGICA DE EXECUÇÃO DE FLUXO - Sessão ativa existe
+            console.log(`📋 [${correlationId}] Sessão ativa encontrada:`, existingSession.id);
+            
+            // Carregar dados do fluxo ativo
+            const { data: activeFlow, error: flowError } = await supabaseAdmin
+              .from('flows')
+              .select('*')
+              .eq('id', existingSession.active_flow_id)
+              .single();
+
+            if (flowError || !activeFlow) {
+              console.error(`❌ [${correlationId}] Erro ao carregar fluxo ativo:`, flowError);
+              // Encerrar sessão inválida
+              await supabaseAdmin
+                .from('chat_sessions')
+                .update({ 
+                  status: 'abandoned',
+                  updated_at: nowIso()
+                })
+                .eq('id', existingSession.id);
+              throw new Error('Fluxo ativo não encontrado');
+            }
+
+            // Executar próximo passo do fluxo
+            const { response, nextStepId } = await executeFlowStep(
+              supabaseAdmin,
+              activeFlow,
+              existingSession.current_step_id,
+              existingSession,
+              messageContent,
+              correlationId
+            );
+
+            flowResponse = response;
+
+            // Atualizar sessão com próximo passo ou finalizar
+            if (nextStepId) {
+              await supabaseAdmin
+                .from('chat_sessions')
+                .update({ 
+                  current_step_id: nextStepId,
+                  updated_at: nowIso()
+                })
+                .eq('id', existingSession.id);
+            } else {
+              // Fluxo concluído
+              await supabaseAdmin
+                .from('chat_sessions')
+                .update({ 
+                  status: 'completed',
+                  updated_at: nowIso()
+                })
+                .eq('id', existingSession.id);
+            }
+
+            sessionUpdated = true;
+          }
+
+          // Enviar resposta se houver
+          if (flowResponse) {
+            console.log(`📤 [${correlationId}] Enviando resposta do fluxo via Evolution API`);
+            
+            // Usar o número normalizado da sessão, não o remoteJid do payload
+            const targetNumber = normalizedPhone;
+            console.log(`🎯 [${correlationId}] Número de destino: ${targetNumber}`);
+            
+            // Verificar se o número existe antes de enviar
+            const checkResponse = await fetch(`${EVOLUTION_API_URL}/chat/whatsappNumbers/${instance}`, {
+              method: 'POST',
+              headers: {
+                'apikey': EVOLUTION_API_KEY,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                numbers: [targetNumber]
+              })
             });
 
-          if (outboundError) {
-            console.error(`❌ [${correlationId}] Erro ao salvar mensagem outbound do motor de fluxos:`, outboundError);
-          } else {
-            console.log(`✅ [${correlationId}] Mensagem outbound do motor de fluxos salva`);
-          }
+            if (checkResponse.ok) {
+              const checkResult = await checkResponse.json();
+              const numberExists = checkResult.find((num: any) => num.jid === targetNumber)?.exists;
+              
+              if (!numberExists) {
+                console.log(`⚠️ [${correlationId}] Número ${targetNumber} não existe no WhatsApp, simulando envio`);
+                
+                // Salvar resposta como enviada mesmo sem enviar (para números de teste)
+                console.log(`💾 [${correlationId}] Salvando mensagem outbound do fluxo (simulada)`);
+                
+                const { error: outboundError } = await supabaseAdmin
+                   .from('messages')
+                   .insert({
+                     id: uuidv4(),
+                     org_id: deviceData.org_id,
+                     device_id: deviceData.id,
+                     chatbot_id: activeChatbot.id,
+                     phone_number: normalizedPhone,
+                     message_content: flowResponse,
+                     direction: 'outbound',
+                     status: 'simulated', // Status especial para números de teste
+                     external_id: `simulated_${Date.now()}`, // ID simulado para evitar constraint
+                     created_at: nowIso(),
+                     updated_at: nowIso()
+                   });
 
-          console.log(`🎉 [${correlationId}] Processamento do motor de fluxos finalizado`);
-          
-          return NextResponse.json({ 
-            success: true, 
-            message: 'Message processed by flows engine',
-            correlationId,
-            flowsResponse: flowsMessage
-          });
+                if (outboundError) {
+                  console.error(`❌ [${correlationId}] Erro ao salvar mensagem outbound simulada:`, outboundError);
+                } else {
+                  console.log(`✅ [${correlationId}] Mensagem outbound simulada salva com sucesso`);
+                }
+                
+                return NextResponse.json({ 
+                  success: true, 
+                  message: 'Mensagem processada pelo motor de fluxos (simulada)',
+                  correlationId,
+                  flowResponse 
+                });
+              }
+            }
+            
+            // Preparar body da requisição para Evolution API
+            const requestBody = {
+              number: targetNumber,
+              text: flowResponse
+            };
+            
+            // Debug: Log do body completo sendo enviado
+            console.log(`🔍 [${correlationId}] Body da requisição para Evolution API:`, JSON.stringify(requestBody, null, 2));
+            
+            const sendResponse = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instance}`, {
+              method: 'POST',
+              headers: {
+                'apikey': EVOLUTION_API_KEY,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(requestBody)
+            });
+
+            if (!sendResponse.ok) {
+              const errorText = await sendResponse.text();
+              console.log(`❌ [${correlationId}] Erro ao enviar via Evolution API:`, errorText);
+              throw new Error(`Evolution API error: ${sendResponse.status}`);
+            }
+
+            const sendResult = await sendResponse.json();
+            console.log(`✅ [${correlationId}] Resposta do fluxo enviada via Evolution API:`, sendResult);
+
+            // Salvar resposta enviada (outbound)
+            console.log(`💾 [${correlationId}] Salvando mensagem outbound do fluxo`);
+            
+            const { error: outboundError } = await supabaseAdmin
+              .from('messages')
+              .insert({
+                id: uuidv4(),
+                org_id: deviceData.org_id,
+                device_id: deviceData.id,
+                chatbot_id: activeChatbot.id,
+                phone_number: normalizedPhone,
+                message_content: flowResponse,
+                direction: 'outbound',
+                status: 'sent',
+                external_id: sendResult.key?.id || null,
+                created_at: nowIso(),
+                updated_at: nowIso()
+              });
+
+            if (outboundError) {
+              console.error(`❌ [${correlationId}] Erro ao salvar mensagem outbound do fluxo:`, outboundError);
+            } else {
+              console.log(`✅ [${correlationId}] Mensagem outbound do fluxo salva`);
+            }
+
+            console.log(`🎉 [${correlationId}] Processamento do fluxo finalizado`);
+            
+            return NextResponse.json({ 
+              success: true, 
+              message: 'Message processed by flows engine',
+              correlationId,
+              flowsResponse: flowResponse,
+              sessionUpdated
+            });
+          }
 
         } catch (flowsError) {
           console.error(`❌ [${correlationId}] Erro no motor de fluxos:`, flowsError);
