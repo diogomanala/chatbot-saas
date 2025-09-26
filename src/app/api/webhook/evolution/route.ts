@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
           id,
           name,
           system_prompt,
-          model,
+          groq_model,
           flows_enabled
         `)
         .eq('org_id', deviceData.org_id)
@@ -166,7 +166,7 @@ export async function POST(req: NextRequest) {
       }
 
       console.log(`✅ [${correlationId}] Chatbot ativo encontrado: ${activeChatbot.name} (ID: ${activeChatbot.id})`);
-      console.log(`🔧 [${correlationId}] Modelo: ${activeChatbot.model || 'gpt-3.5-turbo'}`);
+      console.log(`🔧 [${correlationId}] Modelo: ${activeChatbot.groq_model || 'gpt-3.5-turbo'}`);
       console.log(`🎯 [${correlationId}] Fluxos habilitados: ${activeChatbot.flows_enabled}`);
 
       const normalizedPhone = normalizeJidPhone(remoteJid);
@@ -298,7 +298,7 @@ export async function POST(req: NextRequest) {
         console.log(`🧠 [${correlationId}] Gerando resposta da IA`);
         
         const systemPrompt = activeChatbot.system_prompt || 'Você é um assistente útil.';
-        const model = activeChatbot.model || 'gpt-3.5-turbo';
+        const model = activeChatbot.groq_model || 'gpt-3.5-turbo';
         
         try {
           const response = await fetch('https://api.openai.com/v1/chat/completions', {
