@@ -298,7 +298,9 @@ export async function POST(req: NextRequest) {
         console.log(`🧠 [${correlationId}] Gerando resposta da IA`);
         
         const systemPrompt = activeChatbot.system_prompt || 'Você é um assistente útil.';
-        const model = activeChatbot.groq_model || 'gpt-3.5-turbo';
+        // TODO: Adicionar coluna 'openai_model' na tabela chatbots para evitar confusão entre modelos Groq e OpenAI
+        // Por enquanto, usando modelo fixo válido da OpenAI para resolver erro 404
+        const model = 'gpt-4o'; // Modelo válido da OpenAI (antes estava usando activeChatbot.groq_model que é da Groq)
         
         try {
           const response = await fetch('https://api.openai.com/v1/chat/completions', {
