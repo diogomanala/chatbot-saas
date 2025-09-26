@@ -8,6 +8,10 @@
     }
   },
   "public": true,
+  "env": {
+    "NEXT_PUBLIC_SUPABASE_URL": "https://anlemekgocrrllsogxix.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFubGVtZWtnb2Nycmxsc29neGl4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc2MDEyMjMsImV4cCI6MjA3MzE3NzIyM30.7K4zVdnDh_3YuBz59PX8WoRwDxKjXJ0KXnD1tNvp7iM"
+  },
   "headers": [
     {
       "source": "/api/webhook/(.*)",
