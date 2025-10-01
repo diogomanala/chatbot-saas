@@ -1,0 +1,25 @@
+-- Fix usage_ledger org_id column type from TEXT to UUID
+-- This migration fixes the "operator does not exist: text = uuid" error
+
+-- Change the column type from TEXT to UUID directly
+-- PostgreSQL will handle the conversion if the text values are valid UUIDs
+ALTER TABLE usage_ledger 
+ALTER COLUMN org_id TYPE uuid 
+USING org_id::uuid;
+
+-- Add the foreign key constraint that should exist (if it doesn't already exist)
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE constraint_name = 'usage_ledger_org_id_fkey' 
+        AND table_name = 'usage_ledger'
+    ) THEN
+        ALTER TABLE usage_ledger 
+        ADD CONSTRAINT usage_ledger_org_id_fkey 
+        FOREIGN KEY (org_id) REFERENCES organizations(id);
+    END IF;
+END $$;
+
+-- Create index for better performance
+CREATE INDEX IF NOT EXISTS idx_usage_ledger_org_id ON usage_ledger(org_id);

@@ -1,0 +1,237 @@
+# UX Guidelines — Premium Design
+
+> Objetivo: entregar uma experiência premium, rápida, acessível e consistente, maximizando clareza e foco na tarefa. **Mantenha o design system existente** e **use componentes já criados**.
+
+---
+
+## 1) Princípios
+
+* **Clareza > novidade**: a ação principal deve estar evidente em 1–2s.
+* **Consistência**: padrões repetíveis para navegação, estados e feedback.
+* **Acessibilidade primeiro**: navegação por teclado, leitores de tela, contraste AA.
+* **Mobile‑first**: projete em **375px** e expanda; respeite *safe areas*.
+* **Performance percebida**: skeletons, *optimistic UI* quando suportado, zero jank.
+* **Progressive disclosure**: comece simples; revele poder conforme necessidade.
+
+---
+
+## 2) Tokens & Temas
+
+**Cores**
+
+* Use tokens do DS; evite hex solto. Sugestão: `bg/surface`, `bg/elevated`, `text/primary`, `text/secondary`, `border/subtle`, `accent/brand`, `accent/critical`, `accent/success`.
+* **Dark mode**: aumente contraste de bordas; reduza intensidade de sombras.
+
+**Tipografia**
+
+* Escala: `text-xs, sm, base, lg, xl, 2xl, 3xl`.
+* Interlinhas: 1.4–1.6 (corpo), 1.2 (headings). Títulos curtos.
+
+**Espaçamento**
+
+* Escala 4px: `1=4`, `2=8`, `3=12`, `4=16`, `6=24`, `8=32`, `10=40`.
+* Ritmo vertical consistente (múltiplos de 8/4).
+
+**Elevação**
+
+* `elevation/0` (flat), `1` (subtle), `2` (card), `3` (popover), `4` (modal). Em dark, priorize **borda + sombra leve**.
+
+---
+
+## 3) Layout & Grid
+
+* Contêiner: largura máx 1280–1440px; `px-4` mobile, `px-6` ≥ `md`.
+* Grid base: 12 colunas (desktop), 6 (tablet), 4 (mobile). Gutters 16–24px.
+* Zonas: **header fixo** (sombra sutil), **conteúdo scrollável**, **footer discreto**.
+* Respeite *safe areas* iOS: `pb-[env(safe-area-inset-bottom)]` em barras fixas.
+
+---
+
+## 4) Motion & Microinterações
+
+* **Durações**: 120ms (hover), 160ms (press), 200–240ms (transições), 300ms (modal/sheet).
+* **Easing**: `ease-out` (entrada), `ease-in` (saída), `cubic-bezier(0.2,0.8,0.2,1)` para *premium feel*.
+* **Redução de movimento**: honre `prefers-reduced-motion`; forneça *fade* simples.
+* Feedbacks: hover sutil (opacidade/elevação), press `scale-95`, focus com **anel visível**.
+
+```tsx
+<button className="rounded-2xl bg-accent text-white px-4 py-2 shadow hover:shadow-lg transition-all duration-150 ease-out active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">
+  Continue
+</button>
+```
+
+---
+
+## 5) Componentes (padrões premium)
+
+**Cards**
+
+* `rounded-2xl`, borda `border/subtle`, `shadow-sm` (light) / `shadow-none + border` (dark). Cabeçalho com título curto e ação à direita.
+
+**Botões**
+
+* Tamanhos: `sm(32px)`, `md(40px)`, `lg(48px)`. Área de toque ≥ 44px.
+* Variações: **primary**, **secondary**, **ghost**, **destructive**.
+* Ícone à esquerda (16–20px). Estados: default/hover/active/focus/disabled/loading.
+* Acessibilidade: `aria-busy` no loading; `aria-label` quando só ícone.
+
+**Inputs & Forms**
+
+* Sempre label visível; `aria-describedby` para ajuda/erro.
+* Mensagens de erro curtas e específicas; ícone de erro à direita.
+* `autocomplete` nativo; validação em *blur* e em submit; *debounce* (300ms) em buscas.
+* Ajuda opcional via tooltip (`?`) alinhada ao label.
+
+**Tabelas & Dados**
+
+* Altura de linha: 44–52px; zebra opcional para listas longas.
+* Cabeçalho *sticky*; ordenação com ícone e região de clique clara.
+* Paginação consistente (`limit`, `cursor`); *empty state* com CTA e atalho.
+* Carregamento: 3–5 linhas de skeleton; erro inline com retry.
+
+**Modais / Sheets**
+
+* Use apenas para ações focadas. Fundo com `backdrop-blur-sm` e `bg-black/40`.
+* *Focus trap* + `Esc` para fechar; botão "Fechar" sempre visível.
+
+**Navegação**
+
+* Header com ação primária à direita; breadcrumbs quando profundidade >2.
+* Tabs para trocar contexto no mesmo nível; não para navegação global.
+
+**Feedback**
+
+* Toasts curtos (3–5s). Categorias: success/info/warn/error. Evite spam.
+* Banners apenas para avisos persistentes; fechamento explícito.
+
+**Empty States**
+
+* Ícone sutil, 1–2 linhas, CTA claro; links para docs/ajuda quando útil.
+
+---
+
+## 6) Performance (real e percebida)
+
+* **Skeleton**: menos de 1s em telas simples; 3–5 linhas/tiles; evite *layout shift*.
+* **Virtualização** para listas > 100 itens; paginar cedo.
+* **Imagens**: `loading=lazy`, `decoding=async`, formatos modernos; *responsive images*.
+* **Prefetch** de dados/rotas quando provável; `priority` para heróis.
+* **GPU**: animar com `transform/opacity`; evite `top/left`.
+* **Menos reflows**: evitar mudanças de layout profundas.
+
+---
+
+## 7) Acessibilidade & i18n
+
+* **Foco** visível; ordem lógica; `skip-link` para conteúdo.
+* **ARIA**: `role="dialog"` + `aria-modal` + `aria-labelledby` em modais.
+* **Teclado**: Tab/Shift+Tab, Enter/Espaço; setas em menus/listas.
+* **Tamanho alvo** ≥ 44×44px; espaçamento para toque impreciso.
+* **Contraste**: 4.5:1 texto normal; 3:1 para grande.
+* **i18n**: reserve espaço; evite strings coladas; suporte RTL quando aplicável.
+
+---
+
+## 8) Responsividade
+
+* Breakpoints Tailwind padrão (`sm, md, lg, xl`). Teste **375px** primeiro.
+* Em mobile, converta tabelas complexas para cartões empilhados.
+* Barras laterais viram *drawers*; ações secundárias em *overflow menus*.
+
+---
+
+## 9) Copywriting (UX Writing)
+
+* Tom direto, educado; frases curtas (≤ 20 palavras quando possível).
+* Evite jargão; prefira verbos de ação. Exemplos: "Salvar", "Publicar", "Tentar novamente".
+* Erros: diga o que houve + como resolver + ação imediata.
+* Destrutivas: confirmar com contexto (nome do item) e verbo explícito.
+
+---
+
+## 10) Métricas & Telemetria
+
+* **Métricas**: taxa de sucesso na tarefa, tempo até primeira interação (TTFI), erro por etapa, NPS/CSAT.
+* **Instrumentação**: evento por ação principal; inclua `traceId`, `durationMs`, `result`.
+* **Alertas**: quedas abruptas em conversão, p95 de latência > orçamento.
+
+---
+
+## 11) Checklist de QA (pré‑merge)
+
+* [ ] Ação primária evidente e acessível por teclado
+* [ ] Estados: loading, vazio, erro, sucesso cobertos
+* [ ] Contraste AA; foco visível; rótulos e `aria-*` corretos
+* [ ] Mobile 375px sem *overflows*; toque ≥ 44px
+* [ ] Sem *layout shift* perceptível; animações suaves/respeitam PRM
+
+---
+
+## 12) Exemplo — Card List Premium (React + Tailwind + shadcn/ui + framer‑motion)
+
+```tsx
+import { motion } from "framer-motion";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Plus, RefreshCw } from "lucide-react";
+
+export function PremiumList({ items, isLoading, onAdd, onRefresh }) {
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="rounded-2xl h-28 bg-muted animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  if (!items?.length) {
+    return (
+      <Card className="rounded-2xl border-muted">
+        <CardContent className="py-10 text-center space-y-3">
+          <div className="text-lg font-medium">Nada aqui ainda</div>
+          <p className="text-sm text-muted-foreground">Crie seu primeiro item para começar.</p>
+          <Button onClick={onAdd} className="rounded-2xl" size="lg">
+            <Plus className="mr-2 h-4 w-4" /> Criar item
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold">Itens</h2>
+        <Button variant="ghost" onClick={onRefresh} aria-label="Atualizar lista">
+          <RefreshCw className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {items.map((it, idx) => (
+          <motion.div key={it.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, delay: idx * 0.02 }}>
+            <Card className="rounded-2xl hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <CardTitle className="truncate">{it.title}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground line-clamp-3">{it.description}</p>
+              </CardContent>
+            </Card>
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+## 13) Notas
+
+* **Mantenha os padrões visuais existentes**; **use componentes já criados**.
+* Adicione logs prefixados: `console.log('[UX]', { event, traceId })` onde cabível.
+* Implemente estados de loading e erro; valide inputs do usuário.

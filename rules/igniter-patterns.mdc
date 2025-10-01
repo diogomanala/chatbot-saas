@@ -1,0 +1,32 @@
+## rules/igniter-patterns.mdc
+# Patterns
+
+- **Controller por domínio**; evitar arquivos monolíticos.
+- **Procedures** como middlewares reutilizáveis.
+- **Ensure plugin** para assertivas de negócio.
+- **DTOs** para separar camadas e evitar vazamento de entidades.
+- **Transactions** para consistência de escrita.
+
+---
+
+## rules/igniter-procedures.mdc
+# Procedures (Middleware)
+
+## Exemplos
+```ts
+export const authProcedure = igniter.procedure
+  .use(async ({ ctx, next }) => {
+    const user = await ctx.auth.getUser();
+    if (!user) throw new Error('UNAUTHORIZED');
+    return next({ ctx: { ...ctx, user } });
+  });
+
+export const rateLimit = (limit: number) => igniter.procedure
+  .use(async ({ ctx, next }) => {
+    await ctx.limiter.consume(ctx.ip, limit);
+    return next();
+  });
+```
+
+- **Sempre tipar input/output**.
+- Compor procedures por necessidade: `authProcedure.merge(rateLimit(10))`.

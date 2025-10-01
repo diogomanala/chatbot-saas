@@ -1,0 +1,30 @@
+## rules/igniter-controllers.mdc
+# Controllers Rules
+
+- Local: `src/features/<feature>/controllers`.
+- Use `igniter.query` para **GET**, `igniter.mutation` para **POST/PUT/DELETE**.
+- Validar `body`, `params`, `query` com **Zod**.
+- Handlers curtos; mover regras para **services**.
+- Retornar **JSON compacto** e tipado.
+
+### Template – GET
+```ts
+export const list = igniter.query({
+  input: z.object({ page: z.number().int().min(1).default(1) }),
+  async resolve({ input, ctx }) {
+    const data = await postService.list(input);
+    return { items: data.items, page: input.page };
+  }
+});
+```
+
+### Template – POST
+```ts
+export const create = igniter.mutation({
+  input: z.object({ title: z.string().min(3), body: z.string().min(1) }),
+  async resolve({ input, ctx }) {
+    const id = await postService.create(input);
+    return { id };
+  }
+});
+```

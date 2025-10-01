@@ -1,0 +1,17 @@
+
+## rules/memory.mdc
+# Memory & Notes
+
+Mantenha um **log vivo** de decisões e endpoints.
+
+### Endpoints
+| Data | Rota | Método | Controller | Notas |
+|---|---|---|---|---|
+| 2025‑09‑11 | `/posts` | GET | `posts.list` | paginação `page` |
+
+### Envs (sem valores)
+- `REDIS_URL` – usado por cache/jobs
+- `DATABASE_URL` – conexão principal
+
+### Decisões Arquiteturais
+- 2025‑09‑11: Adotado `Result<T,E>` para services críticos.

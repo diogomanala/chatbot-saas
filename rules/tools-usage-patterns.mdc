@@ -1,0 +1,14 @@
+## rules/tools-usage-patterns.mdc
+# Tools Usage Patterns
+
+- Validar **entrada** com Zod antes de chamar a tool.
+- Retornar **JSON** sucinto e útil; **sem HTML cru**.
+- Propagar erros exatamente como recebidos (com `type` e `message`).
+- **Retry/backoff** em 5xx; **no‑retry** para 4xx.
+
+```ts
+const Input = z.object({ query: z.string().min(1) });
+const input = Input.parse(raw);
+const res = await mcp.tool('search', input);
+if (res.error) throw new Error(res.error.message);
+```

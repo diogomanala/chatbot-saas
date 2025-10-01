@@ -1,0 +1,27 @@
+﻿=== BACKUP COMPLETO DO PROJETO SAAS-CHATBOT ===
+Data/Hora: 24/09/2025 10:43:46
+Diretório de Backup: c:\Users\diogo\Local Sites\saas-chatbot-backup-2025-09-24_10-39-35
+Projeto Original: c:\Users\diogo\Local Sites\saas-chatbot
+
+CONTEÚDO DO BACKUP:
+- Código fonte completo (src/)
+- Arquivos de configuração (package.json, tsconfig.json, etc.)
+- Scripts de banco de dados e utilitários
+- Documentação e regras
+- Arquivos públicos
+- Configurações do projeto
+
+MELHORIAS INCLUÍDAS NESTE BACKUP:
+- Design premium dos ícones do dashboard com fundos arredondados
+- Badge 'Plano Business' substituindo 'owner'
+- Status 'Conectado' com bolinha animada verde
+- Layout responsivo e moderno
+- Correções de alinhamento nos cards de ações rápidas
+
+ARQUIVOS EXCLUÍDOS:
+- node_modules/ (dependências podem ser reinstaladas)
+- .next/ (build cache)
+- *.log (logs temporários)
+
+Total de arquivos no src/: 265
+Total de arquivos na raiz: 206

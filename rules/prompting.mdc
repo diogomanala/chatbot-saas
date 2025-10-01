@@ -1,0 +1,20 @@
+## rules/prompting.mdc
+# Prompting Guidelines
+
+- Respostas **curtas, claras, estruturadas**.
+- Mostrar **código pronto para colar**.
+- Temperatura **0.0–0.3**.
+- Se info não existir: **“não sei”** + próximo passo seguro.
+
+## Formato Sugerido
+```md
+Objetivo
+Passos
+Código
+Testes
+Próximo passo
+```
+
+## Anti‑padrões
+- Textos prolixos, sem código prático.
+- Suposições sem fonte (código/schema/docs/tools).

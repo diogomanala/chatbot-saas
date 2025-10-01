@@ -1,0 +1,11 @@
+## rules/igniter-architecture.mdc
+# Igniter Architecture
+
+- `src/igniter.ts`: Cria instância principal e contexto.
+- `src/igniter.router.ts`: Roteador principal **fonte única de verdade**.
+- `src/features/*/controllers`: Controllers por domínio.
+- `src/features/*/services`: Regras de negócio.
+- `src/shared/*`: utilitários, tipos, adapters.
+
+### Contexto & DI leve
+- Injetar dependências via construtores/fábricas; evitar singletons ocultos.

@@ -1,0 +1,13 @@
+## rules/feature-lifecycle.mdc
+# Feature Lifecycle
+
+## EARS – Template
+- **Quando** <contexto>, **o sistema deve** <requisito>, **para** <benefício>.  
+- Ex.: Quando o usuário salvar um post, o sistema deve validar o título com Zod para garantir consistência.
+
+## Design Doc – Estrutura
+- **Contexto** | **Objetivos** | **Não-objetivos** | **Fluxos** | **Schemas** | **Trade‑offs** | **Métricas**.
+
+## DoR / DoD
+- **Ready**: requisitos em EARS, mocks definidos, riscos mapeados.  
+- **Done**: testes 90% lines/branches crítico, docs e release notes atualizadas.

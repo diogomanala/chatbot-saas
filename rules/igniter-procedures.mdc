@@ -1,0 +1,6 @@
+# Procedures (Middleware)
+
+- Acrescentar dados ao contexto (`context`).  
+- Exemplo: `authProcedure` adicionando `user`.  
+- Reutilizar em múltiplas ações.  
+- Sempre tipar input/output.

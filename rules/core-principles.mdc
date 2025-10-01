@@ -1,0 +1,17 @@
+## rules/core-principles.mdc
+# Core Principles
+
+1. **Type Safety**: Tudo validado com **TypeScript** + **Zod**; nenhum `any` implícito.  
+2. **Small Units**: Controllers pequenos; lógica pesada vai para **services**.  
+3. **Determinismo**: Temperatura **0.0–0.3**; elimine fontes de aleatoriedade.  
+4. **Transparency**: **Não** suprimir erros; inclua código/stack relevante.  
+5. **Observability**: Logar **entrada/saída/latência** de MCP; `traceId` por requisição.  
+6. **Idempotência**: Mutations devem suportar **retries** e **dedupe**.  
+7. **Segurança**: Sanitizar inputs; **nunca** logar segredos; **principle of least privilege**.  
+8. **Performance Budget**: p95 < 300ms para queries simples; p95 < 800ms para mutations.  
+9. **Compatibilidade**: Não quebrar contratos públicos sem **semver** + release notes.
+
+### Guardrails de Código
+- ESLint + TypeScript strict + Prettier.  
+- **Zod** em bordas (HTTP/MCP/Jobs).  
+- `Result<T, E>` ou exceptions tratadas nos controllers (nunca mistas).

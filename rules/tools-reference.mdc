@@ -1,0 +1,11 @@
+## rules/tools-reference.mdc
+# Tools Reference (MCP)
+
+## igniter (server principal)
+- **Input**: Zod schema por operação.  
+- **Output**: JSON tipado; erros propagados.  
+
+## browser (`@playwright/mcp`)
+- **Input**: `{ url: string, consent: boolean }`  
+- **Output**: JSON resumido (links/títulos/status).  
+- **Erros**: `NAVIGATION_ERROR`, `ROBOTS_BLOCKED`, etc.

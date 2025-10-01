@@ -1,0 +1,18 @@
+## rules/igniter-client-usage.mdc
+# Igniter Client Usage
+
+## RSC
+```ts
+const post = await api.posts.byId.query({ id });
+```
+
+## Client Hooks
+```ts
+const { data, error } = api.posts.list.useQuery({ page: 1 });
+const mutation = api.posts.update.useMutation();
+```
+
+## Boas práticas
+- **Cancel tokens** para requests obsoletos.  
+- **Pagination** consistente (`limit`, `cursor`).  
+- **Error boundaries** em componentes de alto nível.
