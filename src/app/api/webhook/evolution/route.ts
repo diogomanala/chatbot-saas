@@ -702,7 +702,7 @@ export async function POST(req: NextRequest) {
 
             if (checkResponse.ok) {
               const checkResult = await checkResponse.json();
-              const numberExists = checkResult.find((num: any) => num.jid === targetNumber)?.exists;
+              const numberExists = checkResult.find((num: any) => num.number === targetNumber)?.exists;
               
               if (!numberExists) {
                 console.log(`⚠️ [${correlationId}] Número ${targetNumber} não existe no WhatsApp, simulando envio`);
