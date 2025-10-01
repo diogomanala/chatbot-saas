@@ -50,6 +50,7 @@ async function executeFlowStep(
       console.log(`➡️ [${correlationId}] Nó input, próximo passo:`, nextStepId);
       break;
 
+    case 'message':
     case 'messageNode':
       // Nó de mensagem - envia uma mensagem
       response = currentNode.data?.label || 'Mensagem não configurada';
@@ -63,7 +64,49 @@ async function executeFlowStep(
       
       const messageEdge = flowData.edges?.find((edge: any) => edge.source === currentStepId);
       nextStepId = messageEdge?.target || null;
-      console.log(`💬 [${correlationId}] Nó messageNode, resposta:`, response, 'próximo:', nextStepId);
+      console.log(`💬 [${correlationId}] Nó message, resposta:`, response, 'próximo:', nextStepId);
+      break;
+
+    case 'options':
+      // Nó de opções - envia mensagem com botões
+      const questionText = currentNode.data?.question || 'Escolha uma opção:';
+      const options = currentNode.data?.options || [];
+      
+      // Criar botões para a Evolution API
+      const buttons = options.map((option: any, index: number) => ({
+        id: `option_${index}`,
+        text: option.text || `Opção ${index + 1}`
+      }));
+      
+      // Enviar mensagem com botões via Evolution API
+      try {
+        const evolutionResponse = await fetch(`${EVOLUTION_API_URL}/message/sendButtons/${session.instance_id}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': EVOLUTION_API_KEY
+          },
+          body: JSON.stringify({
+            number: session.phone_number,
+            text: questionText,
+            buttons: buttons
+          })
+        });
+
+        if (!evolutionResponse.ok) {
+          console.error(`❌ [${correlationId}] Erro ao enviar botões:`, await evolutionResponse.text());
+        } else {
+          console.log(`✅ [${correlationId}] Botões enviados com sucesso`);
+        }
+      } catch (error) {
+        console.error(`❌ [${correlationId}] Erro na requisição de botões:`, error);
+      }
+      
+      response = questionText;
+      
+      // Para nós de opções, não avançamos automaticamente - aguardamos resposta do usuário
+      nextStepId = null;
+      console.log(`🔘 [${correlationId}] Nó options, botões enviados`);
       break;
 
     case 'condition':
@@ -73,21 +116,119 @@ async function executeFlowStep(
       
       let conditionMet = false;
       
-      if (condition === 'contains') {
-        conditionMet = userMessage.toLowerCase().includes(conditionValue?.toLowerCase() || '');
-      } else if (condition === 'equals') {
-        conditionMet = userMessage.toLowerCase().trim() === (conditionValue?.toLowerCase().trim() || '');
-      } else if (condition === 'starts_with') {
-        conditionMet = userMessage.toLowerCase().startsWith(conditionValue?.toLowerCase() || '');
+      // Verificar se é uma resposta de botão
+      if (currentNode.data?.conditions) {
+        // Lógica para múltiplas condições (respostas de botões)
+        const conditions = currentNode.data.conditions;
+        for (const cond of conditions) {
+          if (userMessage.toLowerCase().includes(cond.value.toLowerCase())) {
+            conditionMet = true;
+            // Encontrar a edge correspondente a esta condição
+            const conditionEdges = flowData.edges?.filter((edge: any) => edge.source === currentStepId) || [];
+            const matchingEdge = conditionEdges.find((edge: any) => edge.sourceHandle === cond.id);
+            nextStepId = matchingEdge?.target || null;
+            break;
+          }
+        }
+      } else {
+        // Lógica de condição simples
+        if (condition === 'contains') {
+          conditionMet = userMessage.toLowerCase().includes(conditionValue?.toLowerCase() || '');
+        } else if (condition === 'equals') {
+          conditionMet = userMessage.toLowerCase().trim() === (conditionValue?.toLowerCase().trim() || '');
+        } else if (condition === 'starts_with') {
+          conditionMet = userMessage.toLowerCase().startsWith(conditionValue?.toLowerCase() || '');
+        }
+        
+        // Encontrar a edge correta baseada na condição
+        const conditionEdges = flowData.edges?.filter((edge: any) => edge.source === currentStepId) || [];
+        const trueEdge = conditionEdges.find((edge: any) => edge.sourceHandle === 'true');
+        const falseEdge = conditionEdges.find((edge: any) => edge.sourceHandle === 'false');
+        
+        nextStepId = conditionMet ? (trueEdge?.target || null) : (falseEdge?.target || null);
       }
       
-      // Encontrar a edge correta baseada na condição
-      const conditionEdges = flowData.edges?.filter((edge: any) => edge.source === currentStepId) || [];
-      const trueEdge = conditionEdges.find((edge: any) => edge.sourceHandle === 'true');
-      const falseEdge = conditionEdges.find((edge: any) => edge.sourceHandle === 'false');
-      
-      nextStepId = conditionMet ? (trueEdge?.target || null) : (falseEdge?.target || null);
       console.log(`🔀 [${correlationId}] Nó condition, condição atendida:`, conditionMet, 'próximo:', nextStepId);
+      break;
+
+    case 'image':
+      // Nó de imagem - envia uma imagem
+      const imageUrl = currentNode.data?.imageUrl;
+      const imageCaption = currentNode.data?.caption || '';
+      
+      if (imageUrl) {
+        try {
+          const evolutionResponse = await fetch(`${EVOLUTION_API_URL}/message/sendMedia/${session.instance_id}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': EVOLUTION_API_KEY
+            },
+            body: JSON.stringify({
+              number: session.phone_number,
+              mediatype: 'image',
+              media: imageUrl,
+              caption: imageCaption
+            })
+          });
+
+          if (!evolutionResponse.ok) {
+            console.error(`❌ [${correlationId}] Erro ao enviar imagem:`, await evolutionResponse.text());
+            response = 'Erro ao enviar imagem';
+          } else {
+            console.log(`✅ [${correlationId}] Imagem enviada com sucesso`);
+            response = imageCaption || 'Imagem enviada';
+          }
+        } catch (error) {
+          console.error(`❌ [${correlationId}] Erro na requisição de imagem:`, error);
+          response = 'Erro ao enviar imagem';
+        }
+      } else {
+        response = 'URL da imagem não configurada';
+      }
+      
+      const imageEdge = flowData.edges?.find((edge: any) => edge.source === currentStepId);
+      nextStepId = imageEdge?.target || null;
+      console.log(`🖼️ [${correlationId}] Nó image, próximo:`, nextStepId);
+      break;
+
+    case 'audio':
+      // Nó de áudio - envia um áudio
+      const audioUrl = currentNode.data?.audioUrl;
+      
+      if (audioUrl) {
+        try {
+          const evolutionResponse = await fetch(`${EVOLUTION_API_URL}/message/sendMedia/${session.instance_id}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': EVOLUTION_API_KEY
+            },
+            body: JSON.stringify({
+              number: session.phone_number,
+              mediatype: 'audio',
+              media: audioUrl
+            })
+          });
+
+          if (!evolutionResponse.ok) {
+            console.error(`❌ [${correlationId}] Erro ao enviar áudio:`, await evolutionResponse.text());
+            response = 'Erro ao enviar áudio';
+          } else {
+            console.log(`✅ [${correlationId}] Áudio enviado com sucesso`);
+            response = 'Áudio enviado';
+          }
+        } catch (error) {
+          console.error(`❌ [${correlationId}] Erro na requisição de áudio:`, error);
+          response = 'Erro ao enviar áudio';
+        }
+      } else {
+        response = 'URL do áudio não configurada';
+      }
+      
+      const audioEdge = flowData.edges?.find((edge: any) => edge.source === currentStepId);
+      nextStepId = audioEdge?.target || null;
+      console.log(`🔊 [${correlationId}] Nó audio, próximo:`, nextStepId);
       break;
 
     case 'input_capture':
@@ -97,6 +238,37 @@ async function executeFlowStep(
       // Atualizar variáveis da sessão
       const updatedVariables = {
         ...session.session_variables,
+        [variableName]: userMessage
+      };
+      
+      await supabase
+        .from('chat_sessions')
+        .update({ 
+          session_variables: updatedVariables,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', session.id);
+      
+      // Resposta opcional do nó
+      response = currentNode.data?.response_message || '';
+      
+      const captureEdge = flowData.edges?.find((edge: any) => edge.source === currentStepId);
+      nextStepId = captureEdge?.target || null;
+      console.log(`📝 [${correlationId}] Nó input_capture, variável salva:`, variableName, '=', userMessage);
+      break;
+
+    case 'output':
+      // Nó de saída - finaliza o fluxo
+      response = currentNode.data?.message || 'Fluxo finalizado';
+      nextStepId = null; // Fim do fluxo
+      console.log(`🏁 [${correlationId}] Nó output, finalizando fluxo`);
+      break;
+
+    default:
+      console.warn(`⚠️ [${correlationId}] Tipo de nó não reconhecido:`, currentNode.type);
+      response = 'Erro: tipo de nó não suportado';
+      nextStepId = null;
+  }
         [variableName]: userMessage
       };
       
