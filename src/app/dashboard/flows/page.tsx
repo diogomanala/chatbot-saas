@@ -1401,7 +1401,12 @@ const FlowBuilder = () => {
         position,
         data: { 
           label: type === 'input' ? 'Início' : 'Nova mensagem',
-          message: type === 'message' ? 'Digite sua mensagem aqui...' : undefined
+          message: type === 'message' ? 'Digite sua mensagem aqui...' : undefined,
+          question: type === 'options' ? 'Deseja continuar?' : undefined,
+          options: type === 'options' ? ['Opção 1', 'Opção 2'] : undefined,
+          condition: type === 'condition' ? '' : undefined,
+          imageUrl: type === 'image' ? '' : undefined,
+          audioUrl: type === 'audio' ? '' : undefined
         },
       };
 
