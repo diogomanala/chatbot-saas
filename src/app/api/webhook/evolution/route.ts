@@ -85,7 +85,8 @@ async function executeFlowStep(
     case 'message':
     case 'messageNode':
       // Nó de mensagem - envia uma mensagem
-      response = currentNode.data?.label || 'Mensagem não configurada';
+      // Prioriza o campo 'message' sobre 'label'
+      response = currentNode.data?.message || currentNode.data?.label || 'Mensagem não configurada';
       
       // Substituir variáveis na mensagem se houver
       if (session.session_variables) {
