@@ -720,7 +720,6 @@ export async function POST(req: NextRequest) {
               }
             }
           }
-          }
 
         } catch (flowsError) {
           console.error(`❌ [${correlationId}] Erro no motor de fluxos:`, flowsError);
