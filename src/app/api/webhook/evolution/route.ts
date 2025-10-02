@@ -44,10 +44,42 @@ async function executeFlowStep(
 
   switch (currentNode.type) {
     case 'input':
-      // Nó de entrada - apenas passa para o próximo
-      const inputEdge = flowData.edges?.find((edge: any) => edge.source === currentStepId);
-      nextStepId = inputEdge?.target || null;
-      console.log(`➡️ [${correlationId}] Nó input, próximo passo:`, nextStepId);
+      // Nó de entrada - pode capturar dados ou apenas passar para o próximo
+      const inputPrompt = currentNode.data?.prompt || currentNode.data?.label;
+      const inputVariable = currentNode.data?.variable_name;
+      
+      // Se há um prompt e não temos resposta ainda, enviar o prompt
+      if (inputPrompt && (!userMessage || userMessage === '')) {
+        response = inputPrompt;
+        nextStepId = null; // Aguardar resposta do usuário
+        console.log(`📝 [${correlationId}] Nó input, enviando prompt:`, inputPrompt);
+      } else if (inputVariable && userMessage) {
+        // Capturar a resposta do usuário na variável
+        const updatedVariables = {
+          ...session.session_variables,
+          [inputVariable]: userMessage
+        };
+        
+        await supabase
+          .from('chat_sessions')
+          .update({ 
+            session_variables: updatedVariables,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', session.id);
+        
+        response = currentNode.data?.confirmation_message || 'Dados capturados com sucesso';
+        
+        // Avançar para o próximo nó
+        const inputEdge = flowData.edges?.find((edge: any) => edge.source === currentStepId);
+        nextStepId = inputEdge?.target || null;
+        console.log(`✅ [${correlationId}] Nó input, dados capturados:`, inputVariable, '=', userMessage, 'próximo:', nextStepId);
+      } else {
+        // Apenas passar para o próximo nó (nó de início)
+        const inputEdge = flowData.edges?.find((edge: any) => edge.source === currentStepId);
+        nextStepId = inputEdge?.target || null;
+        console.log(`➡️ [${correlationId}] Nó input, próximo passo:`, nextStepId);
+      }
       break;
 
     case 'message':
@@ -72,44 +104,89 @@ async function executeFlowStep(
       const questionText = currentNode.data?.question || 'Escolha uma opção:';
       const options = currentNode.data?.options || [];
       
-      // Criar botões para a Evolution API
-      const buttons = options.map((option: any, index: number) => ({
-        id: `option_${index}`,
-        text: option.text || `Opção ${index + 1}`
-      }));
-      
-      // Enviar mensagem com botões via Evolution API
-      try {
-        // Normalizar o número de telefone removendo @s.whatsapp.net
-        const targetNumber = session.phone_number.split('@')[0];
+      // Se é a primeira vez executando este nó (sem resposta do usuário ainda)
+      if (!userMessage || userMessage === '') {
+        // Criar botões para a Evolution API
+        const buttons = options.map((option: any, index: number) => ({
+          id: `option_${index}`,
+          text: option.text || `Opção ${index + 1}`
+        }));
         
-        const evolutionResponse = await fetch(`${EVOLUTION_API_URL}/message/sendButtons/${session.instance_id}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': EVOLUTION_API_KEY
-          },
-          body: JSON.stringify({
-            number: targetNumber,
-            text: questionText,
-            buttons: buttons
-          })
-        });
+        // Enviar mensagem com botões via Evolution API
+        try {
+          // Normalizar o número de telefone removendo @s.whatsapp.net
+          const targetNumber = session.phone_number.split('@')[0];
+          
+          const evolutionResponse = await fetch(`${EVOLUTION_API_URL}/message/sendButtons/${session.instance_id}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': EVOLUTION_API_KEY
+            },
+            body: JSON.stringify({
+              number: targetNumber,
+              text: questionText,
+              buttons: buttons
+            })
+          });
 
-        if (!evolutionResponse.ok) {
-          console.error(`❌ [${correlationId}] Erro ao enviar botões:`, await evolutionResponse.text());
-        } else {
-          console.log(`✅ [${correlationId}] Botões enviados com sucesso`);
+          if (!evolutionResponse.ok) {
+            console.error(`❌ [${correlationId}] Erro ao enviar botões:`, await evolutionResponse.text());
+          } else {
+            console.log(`✅ [${correlationId}] Botões enviados com sucesso`);
+          }
+        } catch (error) {
+          console.error(`❌ [${correlationId}] Erro na requisição de botões:`, error);
         }
-      } catch (error) {
-        console.error(`❌ [${correlationId}] Erro na requisição de botões:`, error);
+        
+        response = questionText;
+        
+        // Para nós de opções, não avançamos automaticamente - aguardamos resposta do usuário
+        nextStepId = null;
+        console.log(`🔘 [${correlationId}] Nó options, botões enviados`);
+      } else {
+        // Processar resposta do usuário para nó de opções
+        console.log(`🔘 [${correlationId}] Processando resposta para nó options:`, userMessage);
+        
+        // Encontrar qual opção foi selecionada
+        let selectedOptionIndex = -1;
+        
+        // Verificar se a resposta corresponde a alguma opção
+        for (let i = 0; i < options.length; i++) {
+          const option = options[i];
+          if (userMessage.toLowerCase().includes(option.text.toLowerCase()) ||
+              userMessage.toLowerCase().trim() === option.text.toLowerCase().trim()) {
+            selectedOptionIndex = i;
+            break;
+          }
+        }
+        
+        // Se encontrou uma opção válida, navegar para o próximo nó
+        if (selectedOptionIndex >= 0) {
+          const selectedOption = options[selectedOptionIndex];
+          
+          // Encontrar a edge correspondente a esta opção
+          const optionEdges = flowData.edges?.filter((edge: any) => edge.source === currentStepId) || [];
+          
+          // Procurar por edge com sourceHandle correspondente ao índice da opção
+          const matchingEdge = optionEdges.find((edge: any) => 
+            edge.sourceHandle === `option_${selectedOptionIndex}` || 
+            edge.sourceHandle === selectedOption.id ||
+            edge.sourceHandle === selectedOptionIndex.toString()
+          );
+          
+          // Se não encontrou edge específica, usar a primeira edge disponível
+          nextStepId = matchingEdge?.target || optionEdges[selectedOptionIndex]?.target || null;
+          
+          response = `Você selecionou: ${selectedOption.text}`;
+          console.log(`✅ [${correlationId}] Opção selecionada:`, selectedOption.text, 'próximo:', nextStepId);
+        } else {
+          // Resposta inválida - reenviar as opções
+          response = `Opção inválida. ${questionText}`;
+          nextStepId = null; // Manter no mesmo nó
+          console.log(`❌ [${correlationId}] Opção inválida, mantendo no mesmo nó`);
+        }
       }
-      
-      response = questionText;
-      
-      // Para nós de opções, não avançamos automaticamente - aguardamos resposta do usuário
-      nextStepId = null;
-      console.log(`🔘 [${correlationId}] Nó options, botões enviados`);
       break;
 
     case 'condition':
@@ -486,46 +563,44 @@ export async function POST(req: NextRequest) {
           let sessionUpdated = false;
 
           if (!existingSession) {
-            // 2. LÓGICA DE GATILHO - Não há sessão ativa, verificar trigger_keywords
-            console.log(`🔍 [${correlationId}] Nenhuma sessão ativa encontrada, verificando gatilhos...`);
+            // 2. LÓGICA DE FLUXO VISUAL - Não há sessão ativa, buscar fluxo ativo
+            console.log(`🔍 [${correlationId}] Nenhuma sessão ativa encontrada, buscando fluxo ativo...`);
             
             const { data: flows, error: flowsError } = await supabaseAdmin
               .from('flows')
               .select('*')
-              .eq('chatbot_id', activeChatbot.id);
+              .eq('chatbot_id', activeChatbot.id)
+              .order('updated_at', { ascending: false })
+              .limit(1);
 
             if (flowsError) {
               console.error(`❌ [${correlationId}] Erro ao buscar fluxos:`, flowsError);
               throw new Error('Erro ao buscar fluxos disponíveis');
             }
 
-            // Verificar se a mensagem corresponde a algum trigger_keyword
-            let matchedFlow = null;
-            const messageTextLower = messageContent.toLowerCase().trim();
-
-            for (const flow of flows || []) {
-              if (flow.trigger_keywords && Array.isArray(flow.trigger_keywords)) {
-                const hasMatch = flow.trigger_keywords.some(keyword => 
-                  messageTextLower.includes(keyword.toLowerCase().trim())
-                );
-                
-                if (hasMatch) {
-                  matchedFlow = flow;
-                  console.log(`✅ [${correlationId}] Gatilho encontrado para fluxo:`, flow.name);
-                  break;
-                }
-              }
+            // Usar o fluxo mais recente (ativo no SaaS)
+            let activeFlow = null;
+            
+            if (flows && flows.length > 0) {
+              activeFlow = flows[0];
+              console.log(`✅ [${correlationId}] Fluxo ativo encontrado:`, activeFlow.name);
+            } else {
+              console.log(`⚠️ [${correlationId}] Nenhum fluxo encontrado para o chatbot`);
+              return NextResponse.json({ 
+                message: 'Nenhum fluxo configurado',
+                correlationId 
+              });
             }
 
-            if (matchedFlow) {
-              // Encontrou um fluxo correspondente - criar nova sessão
-              const flowData = matchedFlow.flow_data;
+            if (activeFlow) {
+              // Encontrou um fluxo ativo - criar nova sessão
+              const flowData = activeFlow.flow_data;
               
               // Encontrar o nó "Ponto de Início" (input node)
               const startNode = flowData.nodes?.find(node => node.type === 'input');
               
               if (!startNode) {
-                console.error(`❌ [${correlationId}] Nó de início não encontrado no fluxo:`, matchedFlow.name);
+                console.error(`❌ [${correlationId}] Nó de início não encontrado no fluxo:`, activeFlow.name);
                 throw new Error('Fluxo inválido: nó de início não encontrado');
               }
 
@@ -538,7 +613,7 @@ export async function POST(req: NextRequest) {
                   chatbot_id: activeChatbot.id,
                   phone_number: normalizedPhone,
                   session_token: `session_${normalizedPhone}_${Date.now()}`,
-                  active_flow_id: matchedFlow.id,
+                  active_flow_id: activeFlow.id,
                   current_step_id: startNode.id,
                   status: 'active',
                   session_variables: {},
@@ -558,7 +633,7 @@ export async function POST(req: NextRequest) {
               // Executar o primeiro passo do fluxo
               let { response, nextStepId } = await executeFlowStep(
                 supabaseAdmin, 
-                matchedFlow, 
+                activeFlow, 
                 startNode.id, 
                 newSession,
                 messageContent,
@@ -581,7 +656,7 @@ export async function POST(req: NextRequest) {
                 // Executar o próximo passo
                 const nextStepResult = await executeFlowStep(
                   supabaseAdmin,
-                  matchedFlow,
+                  activeFlow,
                   nextStepId,
                   { ...newSession, current_step_id: nextStepId },
                   messageContent,
@@ -616,8 +691,8 @@ export async function POST(req: NextRequest) {
 
               sessionUpdated = true;
             } else {
-              // Nenhum gatilho encontrado - deixar a IA geral responder
-              console.log(`❌ [${correlationId}] Nenhum gatilho encontrado, passando para IA geral`);
+              // Nenhum fluxo ativo encontrado - deixar a IA geral responder
+              console.log(`❌ [${correlationId}] Nenhum fluxo ativo encontrado, passando para IA geral`);
               // Não retorna aqui, vai para o bloco da IA geral
             }
 
