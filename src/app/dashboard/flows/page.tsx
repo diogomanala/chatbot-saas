@@ -17,6 +17,7 @@ import ReactFlow, {
   NodeProps,
   Handle,
   Position,
+  useReactFlow,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useAuth } from '@/contexts/AuthContext';
