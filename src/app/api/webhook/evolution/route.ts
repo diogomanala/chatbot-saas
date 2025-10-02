@@ -588,6 +588,7 @@ export async function POST(req: NextRequest) {
                 .from('chat_sessions')
                 .insert({
                   id: uuidv4(),
+                  org_id: deviceData.org_id,
                   chatbot_id: activeChatbot.id,
                   phone_number: normalizedPhone,
                   active_flow_id: selectedFlow.id,
