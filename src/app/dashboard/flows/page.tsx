@@ -48,7 +48,7 @@ import {
   Info
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { saveFlowAction } from './actions';
+import { saveFlowAction, deleteFlowAction } from './actions';
 import { createClient } from '@/lib/supabase/client';
 
 // Interface para o chatbot ativo
@@ -109,6 +109,8 @@ const EditableMessageNode = ({ data, id }: NodeProps) => {
   const handleBlur = () => {
     handleSave();
   };
+
+
 
   return (
     <div 
@@ -780,13 +782,15 @@ const Sidebar = ({
   isLoadingFlows, 
   onLoadFlow, 
   onCreateNewFlow,
-  currentFlowId 
+  currentFlowId,
+  onDeleteFlow
 }: {
   savedFlows: SavedFlow[];
   isLoadingFlows: boolean;
   onLoadFlow: (flowId: string) => void;
   onCreateNewFlow: () => void;
   currentFlowId: string | null;
+  onDeleteFlow: (flowId: string) => void;
 }) => {
   const onDragStart = (event: React.DragEvent, nodeType: string) => {
     event.dataTransfer.setData('application/reactflow', nodeType);
@@ -830,23 +834,38 @@ const Sidebar = ({
               {savedFlows.map((flow) => (
                 <div
                   key={flow.id}
-                  onClick={() => onLoadFlow(flow.id)}
-                  className={`p-3 rounded-lg border cursor-pointer transition-colors hover:bg-gray-50 ${
+                  className={`p-3 rounded-lg border transition-colors ${
                     currentFlowId === flow.id 
                       ? 'border-blue-500 bg-blue-50' 
-                      : 'border-gray-200'
+                      : 'border-gray-200 hover:bg-gray-50'
                   }`}
                 >
-                  <div className="flex items-start">
-                    <FileText className="w-4 h-4 mr-2 mt-0.5 text-gray-600" />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm truncate">
-                        {flow.name}
-                      </div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        {new Date(flow.updated_at).toLocaleDateString('pt-BR')}
+                  <div className="flex items-start justify-between">
+                    <div 
+                      className="flex items-start flex-1 cursor-pointer"
+                      onClick={() => onLoadFlow(flow.id)}
+                    >
+                      <FileText className="w-4 h-4 mr-2 mt-0.5 text-gray-600" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">
+                          {flow.name}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          {new Date(flow.updated_at).toLocaleDateString('pt-BR')}
+                        </div>
                       </div>
                     </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteFlow(flow.id);
+                      }}
+                      className="h-6 w-6 p-0 text-gray-400 hover:text-red-500 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -1071,7 +1090,7 @@ const FlowBuilder = () => {
       if (!user || !profile) return;
 
       try {
-        const supabase = createClient();
+        const supabase = await createClient();
         const { data: chatbot, error } = await supabase
           .from('chatbots')
           .select('id, name, flows_enabled')
@@ -1102,7 +1121,7 @@ const FlowBuilder = () => {
     if (!user || !profile) return;
 
     try {
-      const supabase = createClient();
+      const supabase = await createClient();
       const { data: flows, error } = await supabase
         .from('flows')
         .select('id, name, flow_data, created_at, updated_at')
@@ -1261,7 +1280,7 @@ const FlowBuilder = () => {
     }
 
     try {
-      const supabase = createClient();
+      const supabase = await createClient();
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
@@ -1428,11 +1447,16 @@ const FlowBuilder = () => {
       });
 
       // Chamar a Server Action para salvar o fluxo
-      const result = await saveFlowAction(flowName.trim(), flowData);
+      const result = await saveFlowAction(flowName.trim(), flowData, currentFlowId);
 
       if (result.success) {
-        toast.success(`Fluxo "${flowName}" salvo com sucesso!`);
-        console.log('✅ [Frontend] Fluxo salvo com ID:', result.flowId);
+        const isUpdate = !!currentFlowId;
+        const message = isUpdate 
+          ? `Fluxo "${flowName}" atualizado com sucesso!`
+          : `Fluxo "${flowName}" salvo com sucesso!`;
+        
+        toast.success(message);
+        console.log(`✅ [Frontend] Fluxo ${isUpdate ? 'atualizado' : 'salvo'} com ID:`, result.flowId);
         
         // Atualizar o ID do fluxo atual se for um novo fluxo
         if (result.flowId && !currentFlowId) {
@@ -1442,8 +1466,8 @@ const FlowBuilder = () => {
         // Recarregar a lista de fluxos salvos
         fetchSavedFlows();
         
-        // Limpar o nome do fluxo após salvar
-        setFlowName('');
+        // Não limpar o nome do fluxo após salvar/atualizar
+        // setFlowName(''); // Removido para manter o nome após atualização
       } else {
         throw new Error(result.error || 'Erro desconhecido ao salvar fluxo');
       }
@@ -1461,7 +1485,7 @@ const FlowBuilder = () => {
     if (!user || !profile || !reactFlowInstance) return;
 
     try {
-      const supabase = createClient();
+      const supabase = await createClient();
       const { data: flow, error } = await supabase
         .from('flows')
         .select('*')
@@ -1521,6 +1545,40 @@ const FlowBuilder = () => {
     toast.success('Novo fluxo criado!');
   }, [setNodes, setEdges, reactFlowInstance]);
 
+  // Função para excluir um fluxo
+  const deleteFlow = useCallback(async (flowId: string) => {
+    if (!user || !profile) {
+      toast.error('Usuário não autenticado');
+      return;
+    }
+
+    // Confirmar exclusão
+    if (!confirm('Tem certeza que deseja excluir este fluxo? Esta ação não pode ser desfeita.')) {
+      return;
+    }
+
+    try {
+      const result = await deleteFlowAction(flowId);
+
+      if (result.success) {
+        toast.success('Fluxo excluído com sucesso!');
+        
+        // Se o fluxo excluído era o atual, limpar o canvas
+        if (currentFlowId === flowId) {
+          createNewFlow();
+        }
+        
+        // Recarregar a lista de fluxos salvos
+        fetchSavedFlows();
+      } else {
+        throw new Error(result.error || 'Erro desconhecido ao excluir fluxo');
+      }
+    } catch (error) {
+      console.error('Erro ao excluir fluxo:', error);
+      toast.error('Erro ao excluir fluxo');
+    }
+  }, [user, profile, currentFlowId, createNewFlow, fetchSavedFlows]);
+
   return (
     <div className="h-screen flex">
       {/* Barra lateral */}
@@ -1531,6 +1589,7 @@ const FlowBuilder = () => {
           onLoadFlow={loadFlow}
           onCreateNewFlow={createNewFlow}
           currentFlowId={currentFlowId}
+          onDeleteFlow={deleteFlow}
         />
       </div>
 

@@ -1,7 +1,6 @@
 'use server'
 
 import { createClient, createServiceClient } from '@/lib/supabase/server'
-import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 
 interface FlowData {
@@ -12,13 +11,19 @@ interface FlowData {
 
 interface SaveFlowResult {
   success: boolean
-  error?: string
   flowId?: string
+  error?: string
+}
+
+interface DeleteFlowResult {
+  success: boolean
+  error?: string
 }
 
 export async function saveFlowAction(
   flowName: string, 
-  flowData: FlowData
+  flowData: FlowData,
+  flowId?: string | null
 ): Promise<SaveFlowResult> {
   try {
     // Validar parâmetros de entrada
@@ -92,52 +97,158 @@ export async function saveFlowAction(
     // Usar service client (supabaseAdmin) para bypass do RLS
     const supabaseAdmin = createServiceClient()
 
-    // Preparar dados para inserção
-    const flowDataToSave = {
-      org_id: orgId,
-      chatbot_id: chatbotId,
-      name: flowName.trim(),
-      flow_data: flowData,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
+    if (flowId) {
+      // Atualizar fluxo existente
+      console.log('🔄 [SaveFlow] Atualizando fluxo existente:', flowId)
 
-    console.log('💾 [SaveFlow] Salvando fluxo:', {
-      name: flowName,
-      orgId,
-      chatbotId,
-      userId: user.id,
-      nodesCount: flowData.nodes?.length || 0,
-      edgesCount: flowData.edges?.length || 0
-    })
+      const { data: updatedFlow, error: updateError } = await supabaseAdmin
+        .from('flows')
+        .update({
+          name: flowName.trim(),
+          flow_data: flowData,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', flowId)
+        .eq('org_id', orgId) // Garantir que só pode atualizar fluxos da própria org
+        .select('id')
+        .single()
 
-    // Inserir fluxo usando supabaseAdmin (bypass RLS)
-    const { data: insertedFlow, error: insertError } = await supabaseAdmin
-      .from('flows')
-      .insert(flowDataToSave)
-      .select('id')
-      .single()
+      if (updateError) {
+        console.error('❌ [SaveFlow] Erro ao atualizar fluxo:', updateError)
+        return {
+          success: false,
+          error: `Erro ao atualizar fluxo: ${updateError.message}`
+        }
+      }
 
-    if (insertError) {
-      console.error('❌ [SaveFlow] Erro ao inserir fluxo:', insertError)
+      console.log('✅ [SaveFlow] Fluxo atualizado com sucesso:', updatedFlow.id)
+
+      // Revalidar a página para atualizar a lista de fluxos
+      revalidatePath('/dashboard/flows')
+
       return {
-        success: false,
-        error: `Erro ao salvar fluxo: ${insertError.message}`
+        success: true,
+        flowId: updatedFlow.id
+      }
+    } else {
+      // Criar novo fluxo
+      console.log('➕ [SaveFlow] Criando novo fluxo')
+
+      // Preparar dados para inserção
+      const flowDataToSave = {
+        org_id: orgId,
+        chatbot_id: chatbotId,
+        name: flowName.trim(),
+        flow_data: flowData,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+
+      console.log('💾 [SaveFlow] Salvando fluxo:', {
+        name: flowName,
+        orgId,
+        chatbotId,
+        userId: user.id,
+        nodesCount: flowData.nodes?.length || 0,
+        edgesCount: flowData.edges?.length || 0
+      })
+
+      // Inserir fluxo usando supabaseAdmin (bypass RLS)
+      const { data: insertedFlow, error: insertError } = await supabaseAdmin
+        .from('flows')
+        .insert(flowDataToSave)
+        .select('id')
+        .single()
+
+      if (insertError) {
+        console.error('❌ [SaveFlow] Erro ao inserir fluxo:', insertError)
+        return {
+          success: false,
+          error: `Erro ao salvar fluxo: ${insertError.message}`
+        }
+      }
+
+      console.log('✅ [SaveFlow] Fluxo salvo com sucesso:', insertedFlow.id)
+
+      // Revalidar a página para atualizar a lista de fluxos
+      revalidatePath('/dashboard/flows')
+
+      return {
+        success: true,
+        flowId: insertedFlow.id
       }
     }
 
-    console.log('✅ [SaveFlow] Fluxo salvo com sucesso:', insertedFlow.id)
+  } catch (error) {
+    console.error('❌ [SaveFlow] Erro inesperado:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro interno do servidor'
+    }
+  }
+}
+
+export async function deleteFlowAction(flowId: string): Promise<DeleteFlowResult> {
+  try {
+    const supabase = await createClient()
+    
+    // Verificar autenticação
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    
+    if (authError || !user) {
+      return {
+        success: false,
+        error: 'Usuário não autenticado'
+      }
+    }
+
+    // Buscar organização do usuário
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('org_id')
+      .eq('id', user.id)
+      .single()
+
+    if (profileError || !profile?.org_id) {
+      return {
+        success: false,
+        error: 'Organização não encontrada'
+      }
+    }
+
+    const orgId = profile.org_id
+
+    // Usar service client para bypass do RLS
+    const supabaseAdmin = createServiceClient()
+
+    console.log('🗑️ [DeleteFlow] Excluindo fluxo:', flowId)
+
+    // Deletar fluxo garantindo que pertence à organização do usuário
+    const { error: deleteError } = await supabaseAdmin
+      .from('flows')
+      .delete()
+      .eq('id', flowId)
+      .eq('org_id', orgId) // Garantir que só pode deletar fluxos da própria org
+
+    if (deleteError) {
+      console.error('❌ [DeleteFlow] Erro ao excluir fluxo:', deleteError)
+      return {
+        success: false,
+        error: `Erro ao excluir fluxo: ${deleteError.message}`
+      }
+    }
+
+    console.log('✅ [DeleteFlow] Fluxo excluído com sucesso:', flowId)
 
     // Revalidar a página para atualizar a lista de fluxos
     revalidatePath('/dashboard/flows')
 
     return {
-      success: true,
-      flowId: insertedFlow.id
+      success: true
     }
 
   } catch (error) {
-    console.error('❌ [SaveFlow] Erro inesperado:', error)
+    console.error('❌ [DeleteFlow] Erro inesperado:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Erro interno do servidor'
