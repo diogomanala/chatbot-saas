@@ -591,6 +591,7 @@ export async function POST(req: NextRequest) {
                   org_id: deviceData.org_id,
                   chatbot_id: activeChatbot.id,
                   phone_number: normalizedPhone,
+                  session_token: `session_${normalizedPhone}_${Date.now()}`,
                   active_flow_id: selectedFlow.id,
                   current_step_id: startNode.id,
                   status: 'active',
