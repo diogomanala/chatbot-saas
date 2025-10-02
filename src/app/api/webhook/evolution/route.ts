@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
+import { SimplifiedBillingService } from '@/lib/simplified-billing.service';
 
 // Configuração do Supabase Admin
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -388,27 +389,57 @@ export async function POST(req: NextRequest) {
 
       console.log(`💾 [${correlationId}] Salvando mensagem recebida`);
       
-      const { data: savedMessage, error: saveError } = await supabaseAdmin
+      // Primeiro, verificar se a mensagem já existe
+      const { data: existingMessage } = await supabaseAdmin
         .from('messages')
-        .insert({
-          id: uuidv4(),
-          org_id: deviceData.org_id,
-          device_id: deviceData.id,
-          chatbot_id: activeChatbot.id,
-          phone_number: normalizedPhone,
-          message_content: messageContent,
-          direction: 'inbound',
-          status: 'received',
-          external_id: messageId,
-          created_at: nowIso(),
-          updated_at: nowIso()
-        })
-        .select()
+        .select('id')
+        .eq('external_id', messageId)
         .single();
 
-      if (saveError) {
-        console.error(`❌ [${correlationId}] Erro ao salvar mensagem:`, saveError);
-        throw new Error(`Erro ao salvar mensagem: ${saveError.message}`);
+      let savedMessage;
+      
+      if (existingMessage) {
+        console.log(`🔄 [${correlationId}] Mensagem já existe, atualizando: ${existingMessage.id}`);
+        const { data: updatedMessage, error: updateError } = await supabaseAdmin
+          .from('messages')
+          .update({
+            message_content: messageContent,
+            status: 'received',
+            updated_at: nowIso()
+          })
+          .eq('external_id', messageId)
+          .select()
+          .single();
+          
+        if (updateError) {
+          console.error(`❌ [${correlationId}] Erro ao atualizar mensagem:`, updateError);
+          throw new Error(`Erro ao atualizar mensagem: ${updateError.message}`);
+        }
+        savedMessage = updatedMessage;
+      } else {
+        const { data: newMessage, error: saveError } = await supabaseAdmin
+          .from('messages')
+          .insert({
+            id: uuidv4(),
+            org_id: deviceData.org_id,
+            device_id: deviceData.id,
+            chatbot_id: activeChatbot.id,
+            phone_number: normalizedPhone,
+            message_content: messageContent,
+            direction: 'inbound',
+            status: 'received',
+            external_id: messageId,
+            created_at: nowIso(),
+            updated_at: nowIso()
+          })
+          .select()
+          .single();
+
+        if (saveError) {
+          console.error(`❌ [${correlationId}] Erro ao salvar mensagem:`, saveError);
+          throw new Error(`Erro ao salvar mensagem: ${saveError.message}`);
+        }
+        savedMessage = newMessage;
       }
 
       console.log(`✅ [${correlationId}] Mensagem inbound salva: ${savedMessage.id}`);
@@ -489,9 +520,11 @@ export async function POST(req: NextRequest) {
                 })
               });
 
-              await supabaseAdmin
-                .from('messages')
-                .insert({
+              // Calcular tokens e inserir mensagem com cobrança
+              const tokensUsed = Math.max(Math.ceil(flowResponse.length * 0.75), 50); // Mínimo 50 tokens
+              
+              const billingResult = await SimplifiedBillingService.insertMessageWithBilling(
+                {
                   id: uuidv4(),
                   org_id: deviceData.org_id,
                   device_id: deviceData.id,
@@ -500,11 +533,21 @@ export async function POST(req: NextRequest) {
                   message_content: flowResponse,
                   direction: 'outbound',
                   status: 'sent',
+                  external_id: `flow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                  tokens_used: tokensUsed,
                   created_at: nowIso(),
                   updated_at: nowIso()
-                });
+                },
+                deviceData.org_id,
+                flowResponse,
+                tokensUsed
+              );
 
-              console.log(`✅ [${correlationId}] Resposta do fluxo enviada e salva`);
+              if (billingResult.success) {
+                console.log(`✅ [${correlationId}] Resposta do fluxo enviada e salva com cobrança: ${tokensUsed} tokens`);
+              } else {
+                console.error(`❌ [${correlationId}] Erro na cobrança da resposta do fluxo:`, billingResult.billing?.message);
+              }
             }
 
             return NextResponse.json({
@@ -585,9 +628,11 @@ export async function POST(req: NextRequest) {
             })
           });
 
-          await supabaseAdmin
-            .from('messages')
-            .insert({
+          // Calcular tokens e inserir mensagem com cobrança
+          const tokensUsed = Math.max(Math.ceil(aiMessage.length * 0.75), 50); // Mínimo 50 tokens
+          
+          const billingResult = await SimplifiedBillingService.insertMessageWithBilling(
+            {
               id: uuidv4(),
               org_id: deviceData.org_id,
               device_id: deviceData.id,
@@ -596,11 +641,21 @@ export async function POST(req: NextRequest) {
               message_content: aiMessage,
               direction: 'outbound',
               status: 'sent',
+              external_id: `ai_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              tokens_used: tokensUsed,
               created_at: nowIso(),
               updated_at: nowIso()
-            });
+            },
+            deviceData.org_id,
+            aiMessage,
+            tokensUsed
+          );
 
-          console.log(`✅ [${correlationId}] Resposta da IA enviada e salva`);
+          if (billingResult.success) {
+            console.log(`✅ [${correlationId}] Resposta da IA enviada e salva com cobrança: ${tokensUsed} tokens`);
+          } else {
+            console.error(`❌ [${correlationId}] Erro na cobrança da resposta da IA:`, billingResult.billing?.message);
+          }
 
           return NextResponse.json({
             success: true,

@@ -5,7 +5,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     console.log('📨 MESSAGES_UPSERT webhook recebido:', JSON.stringify(body, null, 2));
     
-    // Redirecionar para a rota principal
+    // Redirecionar para a rota principal com estrutura correta
     const mainWebhookUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://saas-chatbot-production.vercel.app'}/api/webhook/evolution`;
     
     const response = await fetch(mainWebhookUrl, {
@@ -13,10 +13,7 @@ export async function POST(req: NextRequest) {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        event: 'messages.upsert',
-        ...body
-      })
+      body: JSON.stringify(body) // Enviar o body original sem modificar
     });
     
     if (response.ok) {
