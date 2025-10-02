@@ -155,7 +155,7 @@ export default function ChatbotsPage() {
 
 
   const createDemoChatbot = async () => {
-    if (!organization?.id) return
+    if (!organization?.id) return false
 
     try {
       const demoChatbot = {

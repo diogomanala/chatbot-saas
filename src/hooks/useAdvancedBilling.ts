@@ -496,6 +496,13 @@ export function useAdvancedBilling({
         }
       };
     }
+    
+    return () => {
+      // Cleanup function for when autoRefresh is false
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+      }
+    };
   }, [autoRefresh, refreshInterval, refreshData, checkCircuitBreaker]);
 
   // Cleanup

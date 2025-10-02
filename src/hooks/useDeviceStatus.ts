@@ -223,7 +223,7 @@ export function useDeviceStatus(
   useEffect(() => {
     if (!session) {
       setLoading(false);
-      return;
+      return () => {}; // Return cleanup function
     }
 
     if (session.access_token) {

@@ -19,11 +19,20 @@ export async function GET(request: NextRequest) {
     // Lista modelos disponíveis
     const models = await openaiService.getAvailableModels()
     
-    // Testa uma resposta simples
+    // Testa uma resposta simples com um objeto chatbot mock
+    const mockChatbot = {
+      id: 'f99ae725-f996-483d-8813-cde922d8877a',
+      org_id: '3108d984-ed2d-44f3-a742-ca223129c5fa',
+      name: 'Teste Zap',
+      system_prompt: 'Você é um assistente útil e amigável.',
+      model: 'gpt-4o-mini',
+      temperature: 0.7
+    }
+    
     const testResponse = await openaiService.generateResponse(
-      'f99ae725-f996-483d-8813-cde922d8877a', // ID do chatbot Teste Zap
-      '3108d984-ed2d-44f3-a742-ca223129c5fa', // ID da organização
-      'Olá, este é um teste da integração OpenAI'
+      mockChatbot,
+      'Olá, este é um teste da integração OpenAI',
+      [] // Histórico vazio
     )
     
     return NextResponse.json({

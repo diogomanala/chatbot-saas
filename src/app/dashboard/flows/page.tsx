@@ -307,7 +307,7 @@ const OptionsNode = ({ data, id }: NodeProps) => {
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center">
           <MousePointer className="w-4 h-4 mr-2 text-purple-600" />
-          <div className="text-sm font-bold text-purple-800">Pergunta com Botões</div>
+          <div className="text-sm font-bold text-purple-800">Pergunta com Lista Numerada</div>
         </div>
         <div className="flex items-center space-x-1">
           <button
@@ -321,10 +321,12 @@ const OptionsNode = ({ data, id }: NodeProps) => {
           >
             <Settings className="w-4 h-4" />
           </button>
-          <Info 
+          <div 
             className="w-4 h-4 text-purple-600 cursor-help" 
             title="Este componente permite criar uma pergunta com múltiplas opções de resposta. Cada opção terá seu próprio ponto de ligação."
-          />
+          >
+            <Info className="w-4 h-4" />
+          </div>
         </div>
       </div>
       
@@ -954,7 +956,7 @@ const Sidebar = ({
             <div className="flex items-center p-3 border-2 border-dashed border-purple-300 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-colors">
               <MousePointer className="w-5 h-5 mr-3 text-purple-600" />
               <div>
-                <div className="font-semibold text-purple-800">Pergunta com Botões</div>
+                <div className="font-semibold text-purple-800">Pergunta com Lista Numerada</div>
                 <div className="text-sm text-purple-600">Enviar pergunta com opções</div>
               </div>
             </div>
@@ -1052,10 +1054,10 @@ const OnboardingModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
             <div className="border rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
                 <MousePointer className="w-4 h-4 text-purple-600" />
-                <h3 className="font-semibold">Pergunta com Botões</h3>
+                <h3 className="font-semibold">Pergunta com Lista Numerada</h3>
               </div>
               <p className="text-sm text-gray-600">
-                Apresenta opções em forma de botões para o usuário escolher. Ideal para menus e escolhas.
+                Apresenta opções em forma de lista numerada para o usuário escolher. Ideal para menus e escolhas.
               </p>
             </div>
             

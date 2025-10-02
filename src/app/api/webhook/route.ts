@@ -284,8 +284,7 @@ async function generateAIResponse(message: string, phoneNumber: string, correlat
 
     // Usar o OpenAI service que já retorna { response, tokensUsed }
     const response = await openaiService.generateResponse(
-      activeChatbot.id,
-      activeChatbot.org_id,
+      activeChatbot, // Passar objeto completo
       message,
       [], // Histórico vazio por enquanto
       correlationId // Usar correlationId como messageId
