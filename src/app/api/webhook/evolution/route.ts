@@ -558,6 +558,170 @@ export async function POST(req: NextRequest) {
             });
           }
 
+          // Se não há sessão ativa ou não está aguardando input, iniciar novo fluxo
+          console.log(`🆕 [${correlationId}] Nenhuma sessão ativa aguardando input. Iniciando novo fluxo...`);
+          
+          // Buscar fluxos disponíveis para este chatbot
+          const { data: availableFlows, error: flowsError } = await supabaseAdmin
+            .from('flows')
+            .select('*')
+            .eq('org_id', deviceData.org_id)
+            .order('created_at', { ascending: false });
+
+          if (flowsError || !availableFlows || availableFlows.length === 0) {
+            console.log(`❌ [${correlationId}] Nenhum fluxo encontrado para iniciar`);
+            // Continuar para IA se não há fluxos
+          } else {
+            // Usar o primeiro fluxo disponível (mais recente)
+            const selectedFlow = availableFlows[0];
+            console.log(`🎯 [${correlationId}] Iniciando fluxo: ${selectedFlow.name} (ID: ${selectedFlow.id})`);
+
+            // Encontrar o nó de início do fluxo
+            const startNode = selectedFlow.flow_data?.nodes?.find((node: any) => node.type === 'input');
+            
+            if (!startNode) {
+              console.error(`❌ [${correlationId}] Fluxo ${selectedFlow.id} não tem nó de início`);
+              // Continuar para IA se fluxo inválido
+            } else {
+              // Criar nova sessão
+              const { data: newSession, error: sessionCreateError } = await supabaseAdmin
+                .from('chat_sessions')
+                .insert({
+                  id: uuidv4(),
+                  chatbot_id: activeChatbot.id,
+                  phone_number: normalizedPhone,
+                  active_flow_id: selectedFlow.id,
+                  current_step_id: startNode.id,
+                  status: 'active',
+                  waiting_for_input: false,
+                  session_variables: {
+                    phone_number: normalizedPhone,
+                    instance_id: instance
+                  },
+                  created_at: nowIso(),
+                  updated_at: nowIso()
+                })
+                .select()
+                .single();
+
+              if (sessionCreateError) {
+                console.error(`❌ [${correlationId}] Erro ao criar sessão:`, sessionCreateError);
+                // Continuar para IA se erro na sessão
+              } else {
+                console.log(`✅ [${correlationId}] Nova sessão criada: ${newSession.id}`);
+
+                // Executar primeiro passo do fluxo
+                const { response, nextStepId } = await executeFlowStep(
+                  supabaseAdmin,
+                  selectedFlow,
+                  startNode.id,
+                  newSession,
+                  messageContent,
+                  correlationId,
+                  instance
+                );
+
+                let flowResponse = response;
+
+                // Atualizar sessão com próximo passo
+                if (nextStepId) {
+                  await supabaseAdmin
+                    .from('chat_sessions')
+                    .update({
+                      current_step_id: nextStepId,
+                      updated_at: nowIso()
+                    })
+                    .eq('id', newSession.id);
+                }
+
+                // Continuar executando passos automaticamente se necessário
+                let currentStepId = nextStepId;
+                while (currentStepId && shouldContinueAutomatically(selectedFlow, currentStepId)) {
+                  console.log(`🔄 [${correlationId}] Continuando automaticamente para passo: ${currentStepId}`);
+                  
+                  const stepResult = await executeFlowStep(
+                    supabaseAdmin,
+                    selectedFlow,
+                    currentStepId,
+                    newSession,
+                    '',
+                    correlationId,
+                    instance
+                  );
+
+                  if (stepResult.response) {
+                    flowResponse = stepResult.response;
+                  }
+
+                  if (stepResult.nextStepId) {
+                    await supabaseAdmin
+                      .from('chat_sessions')
+                      .update({
+                        current_step_id: stepResult.nextStepId,
+                        updated_at: nowIso()
+                      })
+                      .eq('id', newSession.id);
+                  }
+
+                  currentStepId = stepResult.nextStepId;
+                }
+
+                // Enviar resposta se houver
+                if (flowResponse) {
+                  console.log(`📤 [${correlationId}] Enviando resposta do novo fluxo via Evolution API`);
+                  
+                  await fetch(`${EVOLUTION_API_URL}/message/sendText/${instance}`, {
+                    method: 'POST',
+                    headers: {
+                      'apikey': EVOLUTION_API_KEY,
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      number: normalizedPhone,
+                      text: flowResponse
+                    })
+                  });
+
+                  // Calcular tokens e inserir mensagem com cobrança
+                  const tokensUsed = Math.max(Math.ceil(flowResponse.length * 0.75), 50);
+                  
+                  const billingResult = await SimplifiedBillingService.insertMessageWithBilling(
+                    {
+                      id: uuidv4(),
+                      org_id: deviceData.org_id,
+                      device_id: deviceData.id,
+                      chatbot_id: activeChatbot.id,
+                      phone_number: normalizedPhone,
+                      message_content: flowResponse,
+                      direction: 'outbound',
+                      status: 'sent',
+                      external_id: `flow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                      tokens_used: tokensUsed,
+                      created_at: nowIso(),
+                      updated_at: nowIso()
+                    },
+                    deviceData.org_id,
+                    flowResponse,
+                    tokensUsed
+                  );
+
+                  if (billingResult.success) {
+                    console.log(`✅ [${correlationId}] Resposta do novo fluxo enviada e salva com cobrança: ${tokensUsed} tokens`);
+                  } else {
+                    console.error(`❌ [${correlationId}] Erro na cobrança da resposta do novo fluxo:`, billingResult.billing?.message);
+                  }
+
+                  return NextResponse.json({
+                    success: true,
+                    message: 'New flow started and response sent',
+                    correlationId
+                  });
+                }
+              }
+            }
+          }
+          }
+
         } catch (flowsError) {
           console.error(`❌ [${correlationId}] Erro no motor de fluxos:`, flowsError);
           
