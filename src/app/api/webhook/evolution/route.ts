@@ -102,8 +102,21 @@ async function executeFlowStep(
 
     case 'options':
       // Nó de opções - envia mensagem com botões
-      const questionText = currentNode.data?.question || 'Escolha uma opção:';
+      const questionText = currentNode.data?.question || currentNode.data?.message || currentNode.data?.label || 'Escolha uma opção:';
       const options = currentNode.data?.options || [];
+      
+      // Verificar se o nó tem opções configuradas
+      if (!options || options.length === 0) {
+        console.log(`⚠️ [${correlationId}] Nó de opções sem opções configuradas, usando label como resposta`);
+        response = questionText;
+        
+        // Buscar próximo nó conectado
+        const connectedEdges = flowData.edges?.filter((edge: any) => edge.source === currentStepId) || [];
+        nextStepId = connectedEdges[0]?.target || null;
+        
+        console.log(`➡️ [${correlationId}] Nó options sem configuração, próximo passo:`, nextStepId);
+        break;
+      }
       
       // Se é a primeira vez executando este nó (sem resposta do usuário ainda)
       if (!userMessage || userMessage === '') {
