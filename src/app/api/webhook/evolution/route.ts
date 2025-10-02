@@ -19,6 +19,18 @@ const normalizeJidPhone = (jid: string) => jid.replace(/@s\.whatsapp\.net$/, '')
 const nowIso = () => new Date().toISOString();
 
 // Função auxiliar para executar um passo do fluxo
+// Função auxiliar para determinar se deve continuar automaticamente
+function shouldContinueAutomatically(flow: any, nextStepId: string | null): boolean {
+  if (!nextStepId) return false;
+  
+  const nextNode = flow.flow_data.nodes?.find((node: any) => node.id === nextStepId);
+  if (!nextNode) return false;
+  
+  // Continuar automaticamente para nós que não requerem interação do usuário
+  const autoExecuteTypes = ['message', 'messageNode', 'options', 'image', 'audio', 'condition'];
+  return autoExecuteTypes.includes(nextNode.type);
+}
+
 async function executeFlowStep(
   supabase: any,
   flow: any,
@@ -659,9 +671,13 @@ export async function POST(req: NextRequest) {
                 correlationId
               );
               
-              // Se o primeiro passo é um nó input (sem resposta), executar o próximo passo automaticamente
-              if (!response && nextStepId) {
-                console.log(`🔄 [${correlationId}] Nó input executado, continuando para próximo passo: ${nextStepId}`);
+              // Executar passos automaticamente em sequência
+              let currentSession = newSession;
+              let executionCount = 0;
+              const maxExecutions = 5; // Prevenir loops infinitos
+              
+              while ((!response || shouldContinueAutomatically(activeFlow, nextStepId)) && nextStepId && executionCount < maxExecutions) {
+                console.log(`🔄 [${correlationId}] Continuando automaticamente para próximo passo: ${nextStepId} (execução ${executionCount + 1})`);
                 
                 // Atualizar current_step_id primeiro
                 await supabaseAdmin
@@ -670,20 +686,25 @@ export async function POST(req: NextRequest) {
                     current_step_id: nextStepId,
                     updated_at: nowIso()
                   })
-                  .eq('id', newSession.id);
+                  .eq('id', currentSession.id);
 
                 // Executar o próximo passo
                 const nextStepResult = await executeFlowStep(
                   supabaseAdmin,
                   activeFlow,
                   nextStepId,
-                  { ...newSession, current_step_id: nextStepId },
+                  { ...currentSession, current_step_id: nextStepId },
                   messageContent,
                   correlationId
                 );
                 
-                response = nextStepResult.response;
+                // Se o passo atual gerou uma resposta, usar ela
+                if (nextStepResult.response) {
+                  response = nextStepResult.response;
+                }
+                
                 nextStepId = nextStepResult.nextStepId;
+                executionCount++;
               }
               
               flowResponse = response;
@@ -740,7 +761,7 @@ export async function POST(req: NextRequest) {
             }
 
             // Executar próximo passo do fluxo
-            const { response, nextStepId } = await executeFlowStep(
+            let { response, nextStepId } = await executeFlowStep(
               supabaseAdmin,
               activeFlow,
               existingSession.current_step_id,
@@ -748,6 +769,42 @@ export async function POST(req: NextRequest) {
               messageContent,
               correlationId
             );
+
+            // Executar passos automaticamente em sequência para sessões existentes
+            let currentSession = existingSession;
+            let executionCount = 0;
+            const maxExecutions = 5; // Prevenir loops infinitos
+            
+            while ((!response || shouldContinueAutomatically(activeFlow, nextStepId)) && nextStepId && executionCount < maxExecutions) {
+              console.log(`🔄 [${correlationId}] Continuando automaticamente para próximo passo: ${nextStepId} (execução ${executionCount + 1})`);
+              
+              // Atualizar current_step_id primeiro
+              await supabaseAdmin
+                .from('chat_sessions')
+                .update({ 
+                  current_step_id: nextStepId,
+                  updated_at: nowIso()
+                })
+                .eq('id', currentSession.id);
+
+              // Executar o próximo passo
+              const nextStepResult = await executeFlowStep(
+                supabaseAdmin,
+                activeFlow,
+                nextStepId,
+                { ...currentSession, current_step_id: nextStepId },
+                messageContent,
+                correlationId
+              );
+              
+              // Se o passo atual gerou uma resposta, usar ela
+              if (nextStepResult.response) {
+                response = nextStepResult.response;
+              }
+              
+              nextStepId = nextStepResult.nextStepId;
+              executionCount++;
+            }
 
             flowResponse = response;
 
