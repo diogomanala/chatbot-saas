@@ -1567,7 +1567,21 @@ const FlowBuilder = () => {
       const { nodes, edges, viewport } = flow.flow_data;
       
       if (nodes) {
-        setNodes(nodes);
+        // Corrigir nós antigos que podem não ter os dados necessários
+        const correctedNodes = nodes.map((node: Node) => {
+          if (node.type === 'options' && (!node.data?.question || !node.data?.options)) {
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                question: node.data?.question || 'Deseja continuar?',
+                options: node.data?.options || ['Opção 1', 'Opção 2']
+              }
+            };
+          }
+          return node;
+        });
+        setNodes(correctedNodes);
       }
       
       if (edges) {
