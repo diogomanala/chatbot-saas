@@ -179,6 +179,7 @@ const OptionsNode = ({ data, id }: NodeProps) => {
   const [question, setQuestion] = useState(data.question || 'Deseja continuar?');
   const [options, setOptions] = useState(data.options || ['Opção 1', 'Opção 2']);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { setNodes } = useReactFlow();
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -207,6 +208,15 @@ const OptionsNode = ({ data, id }: NodeProps) => {
     setIsEditing(false);
     data.question = question;
     data.options = options;
+    
+    // Forçar atualização do nó no React Flow
+    setNodes((nodes) => 
+      nodes.map((node) => 
+        node.id === id 
+          ? { ...node, data: { ...node.data, question, options } }
+          : node
+      )
+    );
   };
 
   const addOption = (e: React.MouseEvent) => {
@@ -215,6 +225,15 @@ const OptionsNode = ({ data, id }: NodeProps) => {
     const newOptions = [...options, `Opção ${options.length + 1}`];
     setOptions(newOptions);
     data.options = newOptions;
+    
+    // Atualizar no React Flow
+    setNodes((nodes) => 
+      nodes.map((node) => 
+        node.id === id 
+          ? { ...node, data: { ...node.data, options: newOptions } }
+          : node
+      )
+    );
   };
 
   const removeOption = (index: number, e: React.MouseEvent) => {
@@ -224,6 +243,15 @@ const OptionsNode = ({ data, id }: NodeProps) => {
       const newOptions = options.filter((_, i) => i !== index);
       setOptions(newOptions);
       data.options = newOptions;
+      
+      // Atualizar no React Flow
+      setNodes((nodes) => 
+        nodes.map((node) => 
+          node.id === id 
+            ? { ...node, data: { ...node.data, options: newOptions } }
+            : node
+        )
+      );
     }
   };
 
@@ -232,6 +260,15 @@ const OptionsNode = ({ data, id }: NodeProps) => {
     newOptions[index] = value;
     setOptions(newOptions);
     data.options = newOptions;
+    
+    // Atualizar no React Flow
+    setNodes((nodes) => 
+      nodes.map((node) => 
+        node.id === id 
+          ? { ...node, data: { ...node.data, options: newOptions } }
+          : node
+      )
+    );
   };
 
   const handleOptionInputKeyPress = (e: React.KeyboardEvent, index: number) => {
@@ -1171,11 +1208,19 @@ const FlowBuilder = () => {
       if (node.type === 'message' && (!node.data?.message || node.data.message.trim() === '')) {
         errors.push(`Nó de mensagem "${node.id}" está vazio`);
       }
-      if (node.type === 'options' && (!node.data?.question || node.data.question.trim() === '')) {
-        errors.push(`Nó de opções "${node.id}" não tem pergunta definida`);
-      }
-      if (node.type === 'options' && (!node.data?.options || node.data.options.length === 0)) {
-        errors.push(`Nó de opções "${node.id}" não tem opções definidas`);
+      if (node.type === 'options') {
+        console.log(`🔍 Validando nó de opções ${node.id}:`, {
+          data: node.data,
+          question: node.data?.question,
+          options: node.data?.options
+        });
+        
+        if (!node.data?.question || node.data.question.trim() === '') {
+          errors.push(`Nó de opções "${node.id}" não tem pergunta definida`);
+        }
+        if (!node.data?.options || node.data.options.length === 0) {
+          errors.push(`Nó de opções "${node.id}" não tem opções definidas`);
+        }
       }
     });
 
@@ -1438,8 +1483,10 @@ const FlowBuilder = () => {
           ...node,
           data: {
             ...node.data,
-            // Garantir que mensagens editadas sejam salvas
-            message: node.data.message
+            // Garantir que todos os dados sejam preservados
+            message: node.data.message,
+            question: node.data.question,
+            options: node.data.options
           }
         })),
         edges: flow.edges,
