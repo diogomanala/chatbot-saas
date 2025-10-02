@@ -1160,16 +1160,22 @@ const FlowBuilder = () => {
       warnings.push('Múltiplos pontos de início detectados - apenas o primeiro será usado');
     }
 
-    // 2. Verificar se existe pelo menos um nó de mensagem
-    const messageNodes = nodes.filter(node => node.type === 'message');
+    // 2. Verificar se existe pelo menos um nó de mensagem ou opções
+    const messageNodes = nodes.filter(node => node.type === 'message' || node.type === 'options');
     if (messageNodes.length === 0) {
-      errors.push('O fluxo deve ter pelo menos uma mensagem');
+      errors.push('O fluxo deve ter pelo menos uma mensagem ou nó de opções');
     }
 
     // 3. Verificar se todos os nós de mensagem têm conteúdo
     messageNodes.forEach(node => {
-      if (!node.data?.message || node.data.message.trim() === '') {
+      if (node.type === 'message' && (!node.data?.message || node.data.message.trim() === '')) {
         errors.push(`Nó de mensagem "${node.id}" está vazio`);
+      }
+      if (node.type === 'options' && (!node.data?.question || node.data.question.trim() === '')) {
+        errors.push(`Nó de opções "${node.id}" não tem pergunta definida`);
+      }
+      if (node.type === 'options' && (!node.data?.options || node.data.options.length === 0)) {
+        errors.push(`Nó de opções "${node.id}" não tem opções definidas`);
       }
     });
 
