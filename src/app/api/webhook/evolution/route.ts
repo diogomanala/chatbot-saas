@@ -27,7 +27,7 @@ function shouldContinueAutomatically(flow: any, nextStepId: string | null): bool
   if (!nextNode) return false;
   
   // Continuar automaticamente para nós que não requerem interação do usuário
-  const autoExecuteTypes = ['message', 'messageNode', 'image', 'audio', 'condition'];
+  const autoExecuteTypes = ['message', 'messageNode', 'image', 'audio', 'condition', 'start'];
   return autoExecuteTypes.includes(nextNode.type);
 }
 
@@ -56,9 +56,19 @@ async function executeFlowStep(
   let nextStepId: string | null = null;
 
   switch (currentNode.type) {
+    case 'start':
     case 'input':
       const inputPrompt = currentNode.data?.prompt || currentNode.data?.label;
       const inputVariable = currentNode.data?.variable_name;
+      
+      // Para nós de início (start), sempre avançar para o próximo passo
+      if (currentNode.type === 'start') {
+        const startEdge = flowData.edges?.find((edge: any) => edge.source === currentStepId);
+        nextStepId = startEdge?.target || null;
+        console.log(`🚀 [${correlationId}] Nó start, próximo passo:`, nextStepId);
+        response = ''; // Nó de início não envia resposta
+        break;
+      }
       
       if (inputPrompt && (!userMessage || userMessage === '')) {
         response = inputPrompt;
