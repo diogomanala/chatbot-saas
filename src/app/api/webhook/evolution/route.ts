@@ -155,8 +155,11 @@ async function executeFlowStep(
         // Verificar se a resposta corresponde a alguma opção
         for (let i = 0; i < options.length; i++) {
           const option = options[i];
-          if (userMessage.toLowerCase().includes(option.text.toLowerCase()) ||
-              userMessage.toLowerCase().trim() === option.text.toLowerCase().trim()) {
+          // Tratar opção como string ou objeto
+          const optionText = typeof option === 'string' ? option : option.text;
+          
+          if (userMessage.toLowerCase().includes(optionText.toLowerCase()) ||
+              userMessage.toLowerCase().trim() === optionText.toLowerCase().trim()) {
             selectedOptionIndex = i;
             break;
           }
@@ -165,12 +168,14 @@ async function executeFlowStep(
         // Se encontrou uma opção válida, navegar para o próximo nó
         if (selectedOptionIndex >= 0) {
           const selectedOption = options[selectedOptionIndex];
+          const selectedOptionText = typeof selectedOption === 'string' ? selectedOption : selectedOption.text;
           
           // Encontrar a edge correspondente a esta opção
           const optionEdges = flowData.edges?.filter((edge: any) => edge.source === currentStepId) || [];
           
           // Procurar por edge com sourceHandle correspondente ao índice da opção
           const matchingEdge = optionEdges.find((edge: any) => 
+            edge.sourceHandle === `option-${selectedOptionIndex}` || 
             edge.sourceHandle === `option_${selectedOptionIndex}` || 
             edge.sourceHandle === selectedOption.id ||
             edge.sourceHandle === selectedOptionIndex.toString()
@@ -179,8 +184,8 @@ async function executeFlowStep(
           // Se não encontrou edge específica, usar a primeira edge disponível
           nextStepId = matchingEdge?.target || optionEdges[selectedOptionIndex]?.target || null;
           
-          response = `Você selecionou: ${selectedOption.text}`;
-          console.log(`✅ [${correlationId}] Opção selecionada:`, selectedOption.text, 'próximo:', nextStepId);
+          response = `Você selecionou: ${selectedOptionText}`;
+          console.log(`✅ [${correlationId}] Opção selecionada:`, selectedOptionText, 'próximo:', nextStepId);
         } else {
           // Resposta inválida - reenviar as opções
           response = `Opção inválida. ${questionText}`;
