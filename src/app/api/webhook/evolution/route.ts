@@ -206,16 +206,25 @@ async function executeFlowStep(
           const selectedOption = options[selectedOptionIndex];
           const selectedOptionText = typeof selectedOption === 'string' ? selectedOption : selectedOption.text;
           
-          const optionEdges = flowData.edges?.filter((edge: any) => edge.source === currentStepId) || [];
+          // Usar o mesmo padrão de sourceHandle que a lógica de waiting_for_input
+          const sourceHandle = `${currentStepId}__handle-${selectedOptionIndex}`;
+          console.log(`🔍 [${correlationId}] Procurando conexão com sourceHandle: ${sourceHandle}`);
           
-          const matchingEdge = optionEdges.find((edge: any) => 
-            edge.sourceHandle === `option-${selectedOptionIndex}` || 
-            edge.sourceHandle === `option_${selectedOptionIndex}` || 
-            edge.sourceHandle === selectedOption.id ||
-            edge.sourceHandle === selectedOptionIndex.toString()
+          const matchingEdge = flowData.edges?.find((edge: any) => 
+            edge.source === currentStepId && edge.sourceHandle === sourceHandle
           );
           
-          nextStepId = matchingEdge?.target || optionEdges[selectedOptionIndex]?.target || null;
+          nextStepId = matchingEdge?.target || null;
+          
+          if (matchingEdge) {
+            console.log(`✅ [${correlationId}] Conexão encontrada: ${currentStepId} -> ${nextStepId}`);
+          } else {
+            console.error(`❌ [${correlationId}] Conexão não encontrada para sourceHandle: ${sourceHandle}`);
+            // Fallback: tentar encontrar qualquer conexão do nó atual
+            const fallbackEdges = flowData.edges?.filter((edge: any) => edge.source === currentStepId) || [];
+            nextStepId = fallbackEdges[selectedOptionIndex]?.target || fallbackEdges[0]?.target || null;
+            console.log(`🔄 [${correlationId}] Usando fallback, próximo nó: ${nextStepId}`);
+          }
           
           // Não enviar mensagem de confirmação, apenas avançar para o próximo nó
           response = '';
