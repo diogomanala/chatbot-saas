@@ -96,6 +96,8 @@ async function executeFlowStep(
         nextStepId = inputEdge?.target || null;
         console.log(`✅ [${correlationId}] Nó input, dados capturados:`, inputVariable, '=', userMessage, 'próximo:', nextStepId);
       } else {
+        // Nó input sem prompt e sem userMessage - continuar para próximo passo
+        response = ''; // Resposta vazia para não enviar mensagem
         const inputEdge = flowData.edges?.find((edge: any) => edge.source === currentStepId);
         nextStepId = inputEdge?.target || null;
         console.log(`➡️ [${correlationId}] Nó input, próximo passo:`, nextStepId);
