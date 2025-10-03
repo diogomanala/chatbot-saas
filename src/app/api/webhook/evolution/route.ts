@@ -37,9 +37,9 @@ function shouldContinueAutomatically(flow: any, nextStepId: string | null): bool
   }
   
   // Continuar automaticamente para nós que não requerem interação do usuário
-  // NOTA: 'options' foi removido pois deve sempre aguardar resposta do usuário
+  // NOTA: 'options' incluído para permitir continuação automática na primeira execução
   // 'input' incluído pois pode continuar automaticamente quando não aguarda entrada
-  const autoExecuteTypes = ['message', 'messageNode', 'image', 'audio', 'condition', 'start', 'input'];
+  const autoExecuteTypes = ['message', 'messageNode', 'image', 'audio', 'condition', 'start', 'input', 'options'];
   const shouldContinue = autoExecuteTypes.includes(nextNode.type);
   
   console.log(`🔍 [DEBUG] Tipo do próximo nó: ${nextNode.type}, deve continuar: ${shouldContinue}`);
