@@ -131,7 +131,7 @@ async function executeFlowStep(
       }
       
       if (!session.waiting_for_input) {
-        console.log(`🔘 [${correlationId}] Primeira execução do nó options - enviando pergunta com lista numerada`);
+        console.log(`🔘 [${correlationId}] Primeira execução do nó options - preparando pergunta com lista numerada`);
         
         let numberedListMessage = questionText + '\n\n';
         options.forEach((option: any, index: number) => {
@@ -139,29 +139,7 @@ async function executeFlowStep(
           numberedListMessage += `${index + 1}. ${optionText}\n`;
         });
         
-        try {
-          const targetNumber = session.phone_number.split('@')[0];
-          
-          const evolutionResponse = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instance}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': EVOLUTION_API_KEY
-            },
-            body: JSON.stringify({
-              number: targetNumber,
-              text: numberedListMessage.trim()
-            })
-          });
-
-          if (!evolutionResponse.ok) {
-            console.error(`❌ [${correlationId}] Erro ao enviar lista numerada:`, await evolutionResponse.text());
-          } else {
-            console.log(`✅ [${correlationId}] Lista numerada enviada com sucesso`);
-          }
-        } catch (error) {
-          console.error(`❌ [${correlationId}] Erro na requisição de lista numerada:`, error);
-        }
+        console.log(`📝 [${correlationId}] Lista numerada preparada para envio`);
         
         response = numberedListMessage.trim();
         
@@ -221,7 +199,8 @@ async function executeFlowStep(
           
           nextStepId = matchingEdge?.target || optionEdges[selectedOptionIndex]?.target || null;
           
-          response = `Você selecionou: ${selectedOptionText}`;
+          // Não enviar mensagem de confirmação, apenas avançar para o próximo nó
+          response = '';
           console.log(`✅ [${correlationId}] Opção selecionada:`, selectedOptionText, 'próximo:', nextStepId);
           
           await supabase
@@ -513,7 +492,8 @@ export async function POST(req: NextRequest) {
               sessionUpdated = true;
             }
 
-            if (flowResponse) {
+            // Só enviar resposta se não for uma string vazia
+            if (flowResponse && flowResponse.trim() !== '') {
               console.log(`📤 [${correlationId}] Enviando resposta do fluxo via Evolution API`);
               
               const targetNumber = normalizedPhone;
@@ -558,6 +538,8 @@ export async function POST(req: NextRequest) {
               } else {
                 console.error(`❌ [${correlationId}] Erro na cobrança da resposta do fluxo:`, billingResult.billing?.message);
               }
+            } else {
+              console.log(`🔇 [${correlationId}] Resposta vazia - não enviando mensagem`);
             }
 
             return NextResponse.json({
@@ -648,6 +630,8 @@ export async function POST(req: NextRequest) {
 
                 // Continuar executando passos automaticamente se necessário
                 let currentStepId = nextStepId;
+                let sessionToUpdate = { ...newSession };
+                
                 while (currentStepId && shouldContinueAutomatically(selectedFlow, currentStepId)) {
                   console.log(`🔄 [${correlationId}] Continuando automaticamente para passo: ${currentStepId}`);
                   
@@ -655,13 +639,13 @@ export async function POST(req: NextRequest) {
                     supabaseAdmin,
                     selectedFlow,
                     currentStepId,
-                    newSession,
+                    sessionToUpdate,
                     '',
                     correlationId,
                     instance
                   );
 
-                  if (stepResult.response) {
+                  if (stepResult.response && stepResult.response.trim() !== '') {
                     flowResponse = stepResult.response;
                   }
 
@@ -673,13 +657,15 @@ export async function POST(req: NextRequest) {
                         updated_at: nowIso()
                       })
                       .eq('id', newSession.id);
+                    
+                    sessionToUpdate.current_step_id = stepResult.nextStepId;
                   }
 
                   currentStepId = stepResult.nextStepId;
                 }
 
-                // Enviar resposta se houver
-                if (flowResponse) {
+                // Só enviar resposta se não for uma string vazia
+                if (flowResponse && flowResponse.trim() !== '') {
                   console.log(`📤 [${correlationId}] Enviando resposta do novo fluxo via Evolution API`);
                   
                   await fetch(`${EVOLUTION_API_URL}/message/sendText/${instance}`, {
@@ -728,6 +714,8 @@ export async function POST(req: NextRequest) {
                     message: 'New flow started and response sent',
                     correlationId
                   });
+                } else {
+                  console.log(`🔇 [${correlationId}] Resposta vazia do novo fluxo - não enviando mensagem`);
                 }
               }
             }
