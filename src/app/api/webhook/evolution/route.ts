@@ -27,7 +27,8 @@ function shouldContinueAutomatically(flow: any, nextStepId: string | null): bool
   if (!nextNode) return false;
   
   // Continuar automaticamente para nós que não requerem interação do usuário
-  const autoExecuteTypes = ['message', 'messageNode', 'image', 'audio', 'condition', 'start', 'options'];
+  // NOTA: 'options' foi removido pois deve sempre aguardar resposta do usuário
+  const autoExecuteTypes = ['message', 'messageNode', 'image', 'audio', 'condition', 'start'];
   return autoExecuteTypes.includes(nextNode.type);
 }
 
