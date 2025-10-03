@@ -476,6 +476,8 @@ export async function POST(req: NextRequest) {
             .eq('chatbot_id', activeChatbot.id)
             .eq('phone_number', normalizedPhone)
             .eq('status', 'active')
+            .order('updated_at', { ascending: false })
+            .limit(1)
             .maybeSingle();
 
           console.log(`🔍 [${correlationId}] Resultado da busca por sessão:`, {
