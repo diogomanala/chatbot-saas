@@ -486,85 +486,228 @@ export async function POST(req: NextRequest) {
               throw new Error('Fluxo ativo não encontrado');
             }
 
-            const { response, nextStepId } = await executeFlowStep(
-              supabaseAdmin,
-              activeFlow,
-              existingSession.current_step_id,
-              existingSession,
-              messageContent,
-              correlationId,
-              instance
-            );
+            // Carregar dados do fluxo e nó atual
+            const flowData = activeFlow.flow_data;
+            const currentNode = flowData?.nodes?.find((node: any) => node.id === existingSession.current_step_id);
+            
+            if (!currentNode || !flowData) {
+              console.error(`❌ [${correlationId}] Nó atual ou dados do fluxo não encontrados`);
+              return NextResponse.json({ success: false, message: 'Flow data not found' });
+            }
 
-            flowResponse = response;
+            console.log(`🎯 [${correlationId}] Processando resposta para nó: ${currentNode.type} (${currentNode.id})`);
 
-            if (nextStepId) {
+            let nextStepId: string | null = null;
+            let shouldContinue = false;
+
+            // Processar resposta baseada no tipo do nó
+            if (currentNode.type === 'options') {
+              const userResponse = messageContent.trim();
+              const options = currentNode.data?.options || [];
+              
+              console.log(`📝 [${correlationId}] Validando resposta "${userResponse}" contra ${options.length} opções`);
+
+              // Validar se a resposta é um número válido
+              const optionIndex = parseInt(userResponse) - 1; // Converter para índice (1-based para 0-based)
+              
+              if (optionIndex >= 0 && optionIndex < options.length) {
+                const selectedOption = options[optionIndex];
+                console.log(`✅ [${correlationId}] Opção válida selecionada: ${selectedOption.text} (índice ${optionIndex})`);
+                
+                // Encontrar o sourceHandle da opção selecionada
+                const sourceHandle = `${currentNode.id}__handle-${optionIndex}`;
+                console.log(`🔍 [${correlationId}] Procurando conexão com sourceHandle: ${sourceHandle}`);
+                
+                // Encontrar a conexão correspondente
+                const connection = flowData.edges?.find((edge: any) => 
+                  edge.source === currentNode.id && edge.sourceHandle === sourceHandle
+                );
+                
+                if (connection) {
+                  nextStepId = connection.target;
+                  shouldContinue = true;
+                  console.log(`🎯 [${correlationId}] Próximo nó encontrado: ${nextStepId}`);
+                } else {
+                  console.error(`❌ [${correlationId}] Conexão não encontrada para sourceHandle: ${sourceHandle}`);
+                }
+              } else {
+                console.log(`❌ [${correlationId}] Resposta inválida: "${userResponse}". Opções válidas: 1-${options.length}`);
+                
+                // Reenviar as opções com mensagem de erro
+                const optionsText = options.map((option: any, index: number) => 
+                  `${index + 1}. ${option.text}`
+                ).join('\n');
+                
+                const errorMessage = `❌ Opção inválida. Por favor, escolha uma das opções abaixo:\n\n${optionsText}`;
+                
+                await fetch(`${EVOLUTION_API_URL}/message/sendText/${instance}`, {
+                  method: 'POST',
+                  headers: {
+                    'apikey': EVOLUTION_API_KEY,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    number: normalizedPhone,
+                    text: errorMessage
+                  })
+                });
+
+                return NextResponse.json({
+                  success: true,
+                  message: 'Invalid option, error message sent',
+                  correlationId
+                });
+              }
+            } else {
+              // Para outros tipos de nó, usar a lógica padrão
+               const stepResult = await executeFlowStep(
+                 supabaseAdmin,
+                 { flow_data: flowData },
+                 activeSession.current_step_id,
+                 activeSession,
+                 messageContent,
+                 correlationId,
+                 instance
+               );
+              
+              nextStepId = stepResult.nextStepId;
+              shouldContinue = true;
+            }
+
+            // Se encontrou próximo passo, atualizar sessão e continuar
+            if (nextStepId && shouldContinue) {
+              // Atualizar sessão para não aguardar mais input e definir próximo passo
               await supabaseAdmin
                 .from('chat_sessions')
                 .update({
                   current_step_id: nextStepId,
+                  waiting_for_input: false,
                   updated_at: nowIso()
                 })
-                .eq('id', existingSession.id);
+                .eq('id', activeSession.id);
 
-              sessionUpdated = true;
-            }
+              console.log(`✅ [${correlationId}] Sessão atualizada - próximo passo: ${nextStepId}`);
 
-            // Só enviar resposta se não for uma string vazia
-            if (flowResponse && flowResponse.trim() !== '') {
-              console.log(`📤 [${correlationId}] Enviando resposta do fluxo via Evolution API`);
-              
-              const targetNumber = normalizedPhone;
-              
-              await fetch(`${EVOLUTION_API_URL}/message/sendText/${instance}`, {
-                method: 'POST',
-                headers: {
-                  'apikey': EVOLUTION_API_KEY,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  number: targetNumber,
-                  text: flowResponse
-                })
-              });
-
-              // Calcular tokens e inserir mensagem com cobrança
-              const tokensUsed = Math.max(Math.ceil(flowResponse.length * 0.75), 50); // Mínimo 50 tokens
-              
-              const billingResult = await SimplifiedBillingService.insertMessageWithBilling(
-                {
-                  id: uuidv4(),
-                  org_id: deviceData.org_id,
-                  device_id: deviceData.id,
-                  chatbot_id: activeChatbot.id,
-                  phone_number: normalizedPhone,
-                  message_content: flowResponse,
-                  direction: 'outbound',
-                  status: 'sent',
-                  external_id: `flow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                  tokens_used: tokensUsed,
-                  created_at: nowIso(),
-                  updated_at: nowIso()
-                },
-                deviceData.org_id,
-                flowResponse,
-                tokensUsed
+              // Executar próximo passo
+              const { response, nextStepId: followingStepId } = await executeFlowStep(
+                supabaseAdmin,
+                { flow_data: flowData },
+                nextStepId,
+                { ...activeSession, current_step_id: nextStepId, waiting_for_input: false },
+                '',
+                correlationId,
+                instance
               );
 
-              if (billingResult.success) {
-                console.log(`✅ [${correlationId}] Resposta do fluxo enviada e salva com cobrança: ${tokensUsed} tokens`);
-              } else {
-                console.error(`❌ [${correlationId}] Erro na cobrança da resposta do fluxo:`, billingResult.billing?.message);
+              let flowResponse = response;
+              let sessionToUpdate = { ...activeSession, current_step_id: followingStepId || nextStepId, waiting_for_input: false };
+
+              // Atualizar sessão com resultado do próximo passo
+              if (followingStepId) {
+                await supabaseAdmin
+                  .from('chat_sessions')
+                  .update({
+                    current_step_id: followingStepId,
+                    updated_at: nowIso()
+                  })
+                  .eq('id', activeSession.id);
+                sessionToUpdate.current_step_id = followingStepId;
               }
-            } else {
-              console.log(`🔇 [${correlationId}] Resposta vazia - não enviando mensagem`);
+
+              // Continuar executando passos automaticamente se necessário
+              let currentStepId = followingStepId;
+              
+              while (currentStepId && shouldContinueAutomatically({ flow_data: flowData }, currentStepId)) {
+                console.log(`🔄 [${correlationId}] Continuando automaticamente para passo: ${currentStepId}`);
+                
+                const stepResult = await executeFlowStep(
+                  supabaseAdmin,
+                  { flow_data: flowData },
+                  currentStepId,
+                  sessionToUpdate,
+                  '',
+                  correlationId,
+                  instance
+                );
+
+                if (stepResult.response && stepResult.response.trim() !== '') {
+                  flowResponse = stepResult.response;
+                }
+
+                if (stepResult.nextStepId) {
+                  await supabaseAdmin
+                    .from('chat_sessions')
+                    .update({
+                      current_step_id: stepResult.nextStepId,
+                      updated_at: nowIso()
+                    })
+                    .eq('id', activeSession.id);
+                  
+                  sessionToUpdate.current_step_id = stepResult.nextStepId;
+                }
+
+                currentStepId = stepResult.nextStepId;
+              }
+
+              // Só enviar resposta se não for uma string vazia
+              if (flowResponse && flowResponse.trim() !== '') {
+                console.log(`📤 [${correlationId}] Enviando resposta do fluxo via Evolution API`);
+                
+                await fetch(`${EVOLUTION_API_URL}/message/sendText/${instance}`, {
+                  method: 'POST',
+                  headers: {
+                    'apikey': EVOLUTION_API_KEY,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    number: normalizedPhone,
+                    text: flowResponse
+                  })
+                });
+
+                // Calcular tokens e inserir mensagem com cobrança
+                const tokensUsed = Math.max(Math.ceil(flowResponse.length * 0.75), 50);
+                
+                const billingResult = await SimplifiedBillingService.insertMessageWithBilling(
+                  {
+                    id: uuidv4(),
+                    org_id: deviceData.org_id,
+                    device_id: deviceData.id,
+                    chatbot_id: activeChatbot.id,
+                    phone_number: normalizedPhone,
+                    message_content: flowResponse,
+                    direction: 'outbound',
+                    status: 'sent',
+                    external_id: `flow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                    tokens_used: tokensUsed,
+                    created_at: nowIso(),
+                    updated_at: nowIso()
+                  },
+                  deviceData.org_id,
+                  flowResponse,
+                  tokensUsed
+                );
+
+                if (billingResult.success) {
+                  console.log(`✅ [${correlationId}] Resposta do fluxo enviada e salva com cobrança: ${tokensUsed} tokens`);
+                } else {
+                  console.error(`❌ [${correlationId}] Erro na cobrança da resposta do fluxo:`, billingResult.billing?.message);
+                }
+              } else {
+                console.log(`🔇 [${correlationId}] Resposta vazia - não enviando mensagem`);
+              }
+
+              return NextResponse.json({
+                success: true,
+                message: 'Flow response processed',
+                correlationId
+              });
             }
 
             return NextResponse.json({
-              success: true,
-              message: 'Flow response processed',
-              correlationId,
-              sessionUpdated
+              success: false,
+              message: 'Could not process user response',
+              correlationId
             });
           }
 
