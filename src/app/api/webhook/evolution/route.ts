@@ -538,6 +538,45 @@ export async function POST(req: NextRequest) {
                   console.log(`🎯 [${correlationId}] Próximo nó encontrado: ${nextStepId}`);
                 } else {
                   console.error(`❌ [${correlationId}] Conexão não encontrada para sourceHandle: ${sourceHandle}`);
+                  
+                  // Fallback: tentar encontrar qualquer conexão do nó atual
+                  console.log(`🔄 [${correlationId}] Tentando fallback - procurando qualquer conexão do nó ${currentNode.id}`);
+                  const fallbackConnection = flowData.edges?.find((edge: any) => 
+                    edge.source === currentNode.id
+                  );
+                  
+                  if (fallbackConnection) {
+                    nextStepId = fallbackConnection.target;
+                    shouldContinue = true;
+                    console.log(`✅ [${correlationId}] Fallback bem-sucedido - próximo nó: ${nextStepId}`);
+                  } else {
+                    console.error(`❌ [${correlationId}] Nenhuma conexão encontrada para o nó ${currentNode.id}`);
+                    
+                    // Reenviar as opções com mensagem de erro técnico
+                    const optionsText = options.map((option: any, index: number) => 
+                      `${index + 1}. ${option.text}`
+                    ).join('\n');
+                    
+                    const errorMessage = `⚠️ Erro técnico detectado. Por favor, escolha uma das opções abaixo:\n\n${optionsText}`;
+                    
+                    await fetch(`${EVOLUTION_API_URL}/message/sendText/${instance}`, {
+                      method: 'POST',
+                      headers: {
+                        'apikey': EVOLUTION_API_KEY,
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({
+                        number: normalizedPhone,
+                        text: errorMessage
+                      })
+                    });
+
+                    return NextResponse.json({
+                      success: true,
+                      message: 'Technical error, options resent',
+                      correlationId
+                    });
+                  }
                 }
               } else {
                 console.log(`❌ [${correlationId}] Resposta inválida: "${userResponse}". Opções válidas: 1-${options.length}`);
