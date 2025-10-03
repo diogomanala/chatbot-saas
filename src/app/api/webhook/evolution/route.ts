@@ -476,7 +476,7 @@ export async function POST(req: NextRequest) {
             .eq('chatbot_id', activeChatbot.id)
             .eq('phone_number', normalizedPhone)
             .eq('status', 'active')
-            .single();
+            .maybeSingle();
 
           console.log(`🔍 [${correlationId}] Resultado da busca por sessão:`, {
             found: !!existingSession,
@@ -486,7 +486,7 @@ export async function POST(req: NextRequest) {
             error: sessionError?.code
           });
 
-          if (sessionError && sessionError.code !== 'PGRST116') {
+          if (sessionError) {
             console.error(`❌ [${correlationId}] Erro ao buscar sessão:`, sessionError);
             throw new Error('Erro ao verificar sessão ativa');
           }
