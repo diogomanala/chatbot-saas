@@ -21,16 +21,30 @@ const nowIso = () => new Date().toISOString();
 
 // Função auxiliar para determinar se deve continuar automaticamente
 function shouldContinueAutomatically(flow: any, nextStepId: string | null): boolean {
-  if (!nextStepId) return false;
+  console.log(`🔍 [DEBUG] shouldContinueAutomatically chamada com nextStepId: ${nextStepId}`);
+  
+  if (!nextStepId) {
+    console.log(`🔍 [DEBUG] nextStepId é null/undefined - retornando false`);
+    return false;
+  }
   
   const nextNode = flow.flow_data.nodes?.find((node: any) => node.id === nextStepId);
-  if (!nextNode) return false;
+  console.log(`🔍 [DEBUG] nextNode encontrado:`, nextNode?.type, nextNode?.id);
+  
+  if (!nextNode) {
+    console.log(`🔍 [DEBUG] nextNode não encontrado - retornando false`);
+    return false;
+  }
   
   // Continuar automaticamente para nós que não requerem interação do usuário
   // NOTA: 'options' foi removido pois deve sempre aguardar resposta do usuário
   // 'input' incluído pois pode continuar automaticamente quando não aguarda entrada
   const autoExecuteTypes = ['message', 'messageNode', 'image', 'audio', 'condition', 'start', 'input'];
-  return autoExecuteTypes.includes(nextNode.type);
+  const shouldContinue = autoExecuteTypes.includes(nextNode.type);
+  
+  console.log(`🔍 [DEBUG] Tipo do próximo nó: ${nextNode.type}, deve continuar: ${shouldContinue}`);
+  
+  return shouldContinue;
 }
 
 async function executeFlowStep(
