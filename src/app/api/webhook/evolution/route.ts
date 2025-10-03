@@ -464,6 +464,12 @@ export async function POST(req: NextRequest) {
         console.log(`🔄 [${correlationId}] Chatbot ${activeChatbot.id} tem fluxos ativados. Iniciando motor de fluxos...`);
         
         try {
+          console.log(`🔍 [${correlationId}] Buscando sessão ativa para:`, {
+            chatbot_id: activeChatbot.id,
+            phone_number: normalizedPhone,
+            status: 'active'
+          });
+          
           const { data: existingSession, error: sessionError } = await supabaseAdmin
             .from('chat_sessions')
             .select('*')
@@ -471,6 +477,14 @@ export async function POST(req: NextRequest) {
             .eq('phone_number', normalizedPhone)
             .eq('status', 'active')
             .single();
+
+          console.log(`🔍 [${correlationId}] Resultado da busca por sessão:`, {
+            found: !!existingSession,
+            sessionId: existingSession?.id,
+            waitingForInput: existingSession?.waiting_for_input,
+            currentStepId: existingSession?.current_step_id,
+            error: sessionError?.code
+          });
 
           if (sessionError && sessionError.code !== 'PGRST116') {
             console.error(`❌ [${correlationId}] Erro ao buscar sessão:`, sessionError);
